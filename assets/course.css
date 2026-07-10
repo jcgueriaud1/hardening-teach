@@ -1,0 +1,248 @@
+/* course.css — shared stylesheet for all lessons and reference docs.
+   Tufte-inspired: readable serif, generous measure, calm palette,
+   prints cleanly, adapts to light/dark. Link this from every document:
+     <link rel="stylesheet" href="../assets/course.css">
+   (reference docs are one level down too: ../assets/course.css)          */
+
+:root {
+  --ink:        #1a1a17;
+  --ink-soft:   #55524b;
+  --paper:      #fdfcf9;
+  --paper-2:    #f4f1ea;
+  --rule:       #e2ddd2;
+  --accent:     #9a3b1b;   /* terracotta — used sparingly */
+  --accent-2:   #1f5673;   /* slate blue for links/anchors */
+  --code-bg:    #f0ede4;
+  --ok:         #2f6f3e;
+  --warn:       #8a5a00;
+  --measure:    38rem;     /* body line length */
+  --serif:      "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:       "Inter", "Helvetica Neue", Arial, sans-serif;
+  --mono:       "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink:      #e7e3d9;
+    --ink-soft: #a8a293;
+    --paper:    #16161a;
+    --paper-2:  #1e1e24;
+    --rule:     #34343d;
+    --accent:   #e0794f;
+    --accent-2: #7fb2cc;
+    --code-bg:  #22222a;
+    --ok:       #7fc08c;
+    --warn:     #d8a94a;
+  }
+}
+:root[data-theme="dark"]  { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 auto;
+  padding: 4rem 2rem 8rem;
+  max-width: var(--measure);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- The course spine: a small kicker at the top of every doc ---- */
+.kicker {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 0.5rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.kicker .lesson-no { color: var(--accent); font-weight: 600; }
+
+h1 {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 2.1rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.4rem;
+}
+.subtitle {
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: 1.05rem;
+  color: var(--ink-soft);
+  margin: 0 0 2.5rem;
+}
+
+h2 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  margin: 2.8rem 0 0.8rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule);
+}
+h3 {
+  font-family: var(--sans);
+  font-weight: 650;
+  font-size: 1.08rem;
+  margin: 1.8rem 0 0.5rem;
+}
+
+p, li { max-width: var(--measure); }
+a { color: var(--accent-2); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent); }
+
+strong { font-weight: 700; }
+em { font-style: italic; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* ---- Callouts ---- */
+.callout {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  border-left: 3px solid var(--accent);
+  background: var(--paper-2);
+  padding: 0.9rem 1.1rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1.6rem 0;
+}
+.callout.tip     { border-color: var(--ok); }
+.callout.warn    { border-color: var(--warn); }
+.callout .label  {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.35rem;
+}
+
+/* ---- Key term / definition ---- */
+.defterm { font-weight: 700; color: var(--accent); font-style: normal; }
+
+/* ---- Marginnote-ish aside (stacks under text on narrow screens) ---- */
+.aside {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--rule);
+  padding-top: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+/* ---- Citations ---- */
+.cite { font-size: 0.82rem; }
+sup.cite a { text-decoration: none; font-family: var(--sans); }
+.sources {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.sources li { margin-bottom: 0.5rem; }
+
+/* ---- Primary-source card ---- */
+.primary-source {
+  font-family: var(--sans);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1.1rem 1.2rem;
+  margin: 2rem 0;
+  background: var(--paper-2);
+}
+.primary-source .label {
+  font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 0.4rem;
+}
+.primary-source .src-title { font-weight: 700; font-size: 1rem; }
+
+/* ---- Diagram helpers ---- */
+.loop-diagram {
+  font-family: var(--sans);
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+  justify-content: center; margin: 1.8rem 0; font-size: 0.9rem;
+}
+.loop-diagram .node {
+  border: 1.5px solid var(--accent-2); border-radius: 8px;
+  padding: 0.5rem 0.8rem; background: var(--paper); text-align: center;
+}
+.loop-diagram .arrow { color: var(--ink-soft); font-size: 1.2rem; }
+
+/* ---- Footer / next-steps nav ---- */
+.lesson-nav {
+  font-family: var(--sans);
+  margin-top: 3.5rem;
+  padding-top: 1.2rem;
+  border-top: 2px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+/* ---- Ask-your-teacher reminder ---- */
+.ask-teacher {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  background: linear-gradient(0deg, var(--paper-2), var(--paper-2));
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-top: 2.5rem;
+  color: var(--ink-soft);
+}
+.ask-teacher strong { color: var(--ink); }
+
+/* ---- Quiz widget (progressive-disclosure, no JS framework) ---- */
+.quiz { margin: 2rem 0; }
+.quiz .q {
+  font-family: var(--sans); font-weight: 650; margin-bottom: 0.8rem;
+}
+.quiz .choices { list-style: none; padding: 0; margin: 0; }
+.quiz .choices li { margin: 0.4rem 0; }
+.quiz details {
+  border: 1px solid var(--rule); border-radius: 8px;
+  padding: 0.6rem 0.9rem; background: var(--paper-2);
+  font-family: var(--sans); font-size: 0.9rem;
+}
+.quiz details summary {
+  cursor: pointer; font-weight: 600; color: var(--accent-2);
+}
+.quiz details[open] summary { margin-bottom: 0.5rem; }
+
+/* ---- Print ---- */
+@media print {
+  body { background: #fff; color: #000; padding: 1.5cm; max-width: none; font-size: 11pt; }
+  .lesson-nav, .ask-teacher { display: none; }
+  a { color: #000; text-decoration: underline; }
+  pre, .callout, .primary-source { break-inside: avoid; }
+  h2 { break-after: avoid; }
+}
