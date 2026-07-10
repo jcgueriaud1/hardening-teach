@@ -78,6 +78,21 @@ from here, not from parametric guesses. Wisdom comes from the communities below.
   Evaluation reference. Use for: pre-built eval templates, LLM-as-a-judge via function calling
   (explanations by default), versioned datasets, and the experiment recipe.
 
+### Pillar 3b — Getting Claude Code's own traces into Phoenix (the user's setup)
+
+- [Claude Code docs: Monitoring & usage](https://code.claude.com/docs/en/monitoring-usage) · [Agent SDK observability](https://code.claude.com/docs/en/agent-sdk/observability)
+  The authoritative telemetry spec. Use for: enabling traces (needs **both**
+  `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` + `OTEL_TRACES_EXPORTER=otlp`),
+  the span tree (`claude_code.interaction → llm_request / tool → tool.execution`), and content opt-in flags.
+- [`Arize-ai/coding-harness-tracing` (hooks plugin)](https://github.com/Arize-ai/coding-harness-tracing)
+  Hooks-based instrumentation that emits OpenInference spans and **dual-targets Phoenix** (self-hosted)
+  or Arize AX. Use for: the lowest-friction documented way to see AGENT/LLM/TOOL-kinded Claude Code spans in Phoenix.
+- [`Arize-ai/claude-code-otlp-collector` (OTLP bridge)](https://github.com/Arize-ai/claude-code-otlp-collector)
+  Enriches Claude Code's native beta OTLP traces with OpenInference attributes
+  (`interaction→AGENT`, `llm_request→LLM`, `tool→TOOL`). Use for: building on the native beta traces. (README targets Arize; Phoenix works via OTLP but isn't documented there.)
+- [Phoenix discussion #11153 — integrating Claude Code with Phoenix](https://github.com/Arize-ai/phoenix/discussions/11153)
+  Arize maintainer confirms the hooks plugin sends to Phoenix. Use for: the canonical "which path" answer.
+
 ## Wisdom (Communities)
 
 - [Vaadin Forum — "biggest problem doing agentic coding with Vaadin?"](https://vaadin.com/forum/t/whats-your-biggest-problem-doing-agentic-coding-with-vaadin/179541) · [Best practices for Claude Code](https://vaadin.com/forum/t/best-practices-for-claude-code/178487)
@@ -90,6 +105,9 @@ from here, not from parametric guesses. Wisdom comes from the communities below.
   Use for: Phoenix instrumentation and eval-design troubleshooting.
 
 ## Gaps
-- **No verified end-to-end example** of tracing *Claude Code itself* (as opposed to an app that calls an LLM SDK) into Phoenix. How Claude Code emits/exports traces, and whether that maps cleanly onto OpenInference span kinds, is an open question to resolve by experiment — likely a future lesson and learning record.
+- ~~No verified example of tracing Claude Code itself into Phoenix.~~ **Resolved** (see Pillar 3b and
+  learning-record 0003): Claude Code has native beta OTLP traces, and Arize ships a hooks plugin that
+  dual-targets Phoenix. Open sub-question: which path the user is actually on (changes whether spans are
+  OpenInference-kinded or raw `claude_code.*`).
 - **Vaadin-specific agent evals** don't exist off the shelf. What "correct Vaadin code" looks like as a Phoenix evaluator (uses real components, no hallucinated API, passes TestBench) is something we'll have to design.
 - Exact Vaadin-version targeting of `spec-driven-development-demo` and current wording of the Anthropic "harness" posts are unconfirmed here (egress-blocked); verify in a browser before quoting precisely.

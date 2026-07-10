@@ -32,13 +32,12 @@ jobs:
       - name: Build site
         run: python scripts/build_site.py
 
-      # Tries to enable Pages automatically (source = GitHub Actions).
-      # If your org restricts this, enable it once by hand:
-      # Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+      # ONE-TIME manual step: enable Pages in the repo settings first —
+      #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+      # The Actions token cannot enable Pages itself, so this action just reads
+      # the existing config. After the one-time toggle, every push auto-deploys.
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
