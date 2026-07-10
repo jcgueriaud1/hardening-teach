@@ -9,10 +9,14 @@ Working notes and user preferences for this teaching workspace.
 - Chose goals 1+4 in the mission interview: "Understand harnesses deeply" AND
   "Make Vaadin agent-ready".
 
+## Confirmed
+- App is **Vaadin Flow (Java)**, not Hilla → emphasize Flow pain points (Grid, Binder, Lumo/Aura).
+- Phoenix traces come from **Claude Code itself** (the agent's own loop), not an app-embedded LLM SDK.
+
 ## To confirm next session
 - Exact experience level with agent internals (assumed "fuzzy on mechanics, wants depth").
-- Whether the Vaadin app is Flow (Java) or Hilla (React) or both — changes agent pain points.
-- How Phoenix is currently wired (which instrumentation, what they see today).
+- The exact Claude Code → Phoenix wiring (native OTel + collector? a proxy emitting OpenInference spans?)
+  — determines whether they see a real span tree or flat telemetry. (Researching now.)
 - Whether they want to join a community (see RESOURCES.md Wisdom section).
 
 ## Teaching preferences observed
