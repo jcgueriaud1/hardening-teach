@@ -24,6 +24,13 @@ Working notes and user preferences for this teaching workspace.
 - The interactive AskUserQuestion tool was failing in this environment early on;
   fall back to plain-text questions if it errors again.
 
+## Deployment
+- Published as a GitHub Pages site, auto-deployed by `.github/workflows/pages.yml` on every push to `main`.
+- Live at: **https://jcgueriaud1.github.io/hardening-teach/**
+- One-time setup done: Pages source set to "GitHub Actions"; default branch switched to `main`
+  (was the old `claude/install-...` branch, which broke the `github-pages` environment branch rule).
+- The index auto-discovers lessons/reference docs by `<title>`, so new lessons appear with no manual edits.
+
 ## Conventions for this workspace
 - Every lesson & reference doc links `assets/course.css`.
 - Cite sources inline (superscript) and list them at the foot of each lesson.
