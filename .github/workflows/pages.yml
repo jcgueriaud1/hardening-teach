@@ -1,0 +1,56 @@
+name: Deploy course to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions the official Pages actions need.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; let a newer push supersede an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install build deps
+        run: pip install markdown
+
+      - name: Build site
+        run: python scripts/build_site.py
+
+      # ONE-TIME manual step: enable Pages in the repo settings first —
+      #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+      # The Actions token cannot enable Pages itself, so this action just reads
+      # the existing config. After the one-time toggle, every push auto-deploys.
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
