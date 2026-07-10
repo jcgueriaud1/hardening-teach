@@ -1,0 +1,190 @@
+<link rel="stylesheet" href="../assets/course.css">
+<title>Glossary · Coding Agents × Vaadin × Phoenix</title>
+
+<p class="kicker"><span class="lesson-no">REFERENCE</span> <span>Canonical vocabulary</span></p>
+<h1>Glossary</h1>
+<p class="subtitle">The shared language for this course. When a term below appears in a lesson,
+it means exactly this. Opinionated on purpose: where the field uses several words for one idea,
+one is chosen and the rest are listed as <em>avoid</em> aliases.</p>
+
+<div class="callout tip">
+  <span class="label">How this grows</span>
+  This is a living document. Terms are added or sharpened as your understanding deepens —
+  a definition written today may be revised in week six. That revision <em>is</em> the learning.
+</div>
+
+<h2>Harness &amp; the agent loop</h2>
+
+<p><span class="defterm">Harness</span><br>
+The scaffolding around a model that runs the agent: it assembles context, exposes tools,
+calls the model, executes the model's tool calls, feeds the results back, and manages context
+across turns. Anthropic calls the <em>Claude Agent SDK</em> "a general-purpose agent harness."
+<em>Avoid</em>: wrapper, framework, the AI.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk">Agent SDK</a>]</span></p>
+
+<p><span class="defterm">Agentic loop</span><br>
+The repeating cycle the harness drives: <strong>gather context → take action → verify work → repeat</strong>,
+until the task is done. The model chooses each action; the harness executes it and returns the result.
+<em>Avoid</em>: the algorithm, the pipeline.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk">Agent SDK</a>]</span></p>
+
+<p><span class="defterm">Agent</span> vs. <span class="defterm">workflow</span><br>
+A <strong>workflow</strong> orchestrates models and tools through <em>predefined code paths</em>.
+An <strong>agent</strong> is a model that <em>dynamically directs its own process and tool use</em>.
+Claude Code is an agent; a fixed prompt-chain is a workflow.
+<span class="cite">[<a href="https://www.anthropic.com/research/building-effective-agents">Building Effective Agents</a>]</span></p>
+
+<p><span class="defterm">Turn</span><br>
+One pass through the loop: the model is invoked once, may emit text and/or tool calls, and the harness
+runs those calls. A task usually takes many turns.</p>
+
+<p><span class="defterm">Verification</span><br>
+The step where the agent (or the harness) checks the work before continuing — tests, build output,
+a rubric, a visual diff. It "finishes" the loop and stops errors compounding. Models are poor at
+grading their own work, so <em>external, rules-based</em> verification is preferred.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Harnesses</a>]</span></p>
+
+<h2>Context</h2>
+
+<p><span class="defterm">Context window</span><br>
+The finite set of tokens the model can attend to in one inference pass — a scarce "attention budget"
+with diminishing returns as it fills. Claude Code's default is 200K tokens.
+<em>Avoid</em>: memory, RAM.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Context Engineering</a>, <a href="https://code.claude.com/docs/en/context-window">CC docs</a>]</span></p>
+
+<p><span class="defterm">Context engineering</span><br>
+The strategies for curating and maintaining the optimal set of tokens in the window <em>over time</em>
+(system prompt, tools, history, retrieved data). The "natural progression of prompt engineering":
+prompt engineering writes the prompt; context engineering manages the whole evolving state.
+<em>Avoid</em>: prompt tuning.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Context Engineering</a>]</span></p>
+
+<p><span class="defterm">System prompt</span><br>
+The always-loaded instructions defining the agent's behavior, tool use, and output format. Loaded first;
+in Claude Code it is ~4,200 tokens and invisible to the user. Should be written at the right
+<em>altitude</em> — specific enough to guide, general enough not to be brittle.
+<span class="cite">[<a href="https://code.claude.com/docs/en/context-window">CC docs</a>]</span></p>
+
+<p><span class="defterm">Compaction</span><br>
+Compressing a long history and large tool outputs into a structured, provenance-preserving summary,
+so a long-running agent can keep working without exhausting the window.
+<em>Avoid</em>: truncation (that just drops tokens; compaction summarizes).
+<span class="cite">[<a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Harnesses</a>]</span></p>
+
+<p><span class="defterm">Just-in-time retrieval</span><br>
+Loading context on demand (the agent writes a targeted query and pulls only what it needs now)
+rather than pre-loading everything up front. The Vaadin MCP server is a JIT source of Vaadin docs.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Context Engineering</a>]</span></p>
+
+<h2>Tools &amp; extension</h2>
+
+<p><span class="defterm">Tool</span><br>
+A defined capability the model can invoke to observe or act — read a file, run a command, query an API.
+Tool definitions live <em>in the context window</em> and deserve the same care as the main prompt;
+good tools are consolidated, namespaced, token-efficient, and return actionable errors.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing Tools</a>]</span></p>
+
+<p><span class="defterm">MCP (Model Context Protocol)</span><br>
+An open standard for connecting agents to external tools and data. MCP servers expose tools, resources,
+and prompts. In Claude Code, MCP tool <em>names</em> load up front but <em>schemas are deferred</em>,
+loaded on demand to save context. <em>Avoid</em>: plugin, API (too generic).
+<span class="cite">[<a href="https://code.claude.com/docs/en/mcp">CC docs</a>]</span></p>
+
+<p><span class="defterm">Subagent</span><br>
+A specialized agent the lead agent delegates to, running in its <em>own separate context window</em>
+with a custom system prompt, specific tools, and independent permissions. It does side work and
+returns only a distilled summary (often ~1–2k tokens), preserving the lead agent's context.
+<em>Avoid</em>: thread, worker (unless in the orchestrator-workers pattern specifically).
+<span class="cite">[<a href="https://code.claude.com/docs/en/sub-agents">CC docs</a>, <a href="https://www.anthropic.com/engineering/multi-agent-research-system">Multi-agent</a>]</span></p>
+
+<p><span class="defterm">Skill</span><br>
+A packaged, reusable unit of agent guidance (instructions + optional scripts/resources) that
+auto-activates by context. Vaadin ships official skills (<code>aura-theme</code>, <code>frontend-design</code>,
+<code>vaadin-form-layout</code>). <em>Avoid</em>: command (that's a slash command), prompt.
+<span class="cite">[<a href="https://github.com/vaadin/agent-skills">vaadin/agent-skills</a>]</span></p>
+
+<h2>Vaadin agent-readiness</h2>
+
+<p><span class="defterm">Agent-ready (project)</span><br>
+A repo structured so an agent can work end-to-end with few mistakes: authoritative rule files,
+a doc-grounding MCP server, framework-aware skills, and a way for the agent to <em>verify</em> its own
+UI. The reference layout is <code>vaadin/spec-driven-development-demo</code>.
+<span class="cite">[<a href="https://github.com/vaadin/spec-driven-development-demo">demo repo</a>]</span></p>
+
+<p><span class="defterm">Vaadin MCP server</span><br>
+The official read-only doc-grounding server at <code>mcp.vaadin.com</code> (streamable-HTTP). Tools:
+<code>search_vaadin_docs</code>, <code>get_full_document</code>, <code>get_vaadin_version</code>.
+Framework-aware (Flow vs Hilla). Its job: stop the agent hallucinating outdated/invented Vaadin API.
+<span class="cite">[<a href="https://vaadin.com/blog/official-vaadin-mcp">announcement</a>]</span></p>
+
+<p><span class="defterm">CLAUDE.md</span> / <span class="defterm">AGENTS.md</span><br>
+Auto-loaded project context files for conventions, commands, and guardrails. <code>AGENTS.md</code> is the
+cross-tool-portable form; <code>CLAUDE.md</code> holds Claude-specific rules. Vaadin does not publish a single
+canonical <code>CLAUDE.md</code> to copy — its guidance ships as skills.
+<span class="cite">[<a href="https://www.anthropic.com/engineering/claude-code-best-practices">CC best practices</a>]</span></p>
+
+<p><span class="defterm">Flow</span> vs <span class="defterm">Hilla</span><br>
+Two Vaadin front-end models: <strong>Flow</strong> = UI written in Java (server-driven);
+<strong>Hilla</strong> = React front end with a typed Java back end. Agents frequently confuse the two —
+framework-awareness in tooling exists to prevent that.</p>
+
+<h2>Observability (Phoenix)</h2>
+
+<p><span class="defterm">Trace</span><br>
+The complete path of a single request through the app — all spans sharing one <code>trace_id</code>.
+<em>Avoid</em>: log, session (a session groups multiple traces).
+<span class="cite">[<a href="https://github.com/Arize-ai/openinference/blob/main/spec/traces.md">OpenInference</a>]</span></p>
+
+<p><span class="defterm">Span</span><br>
+The atomic unit of work in a trace — one LLM call, one tool execution, one retrieval — carrying a name,
+parent span ID, timestamps, attributes, events, and status. Spans nest via <code>parent_id</code>.
+<span class="cite">[<a href="https://github.com/Arize-ai/openinference/blob/main/spec/traces.md">OpenInference</a>]</span></p>
+
+<p><span class="defterm">Span kind</span><br>
+The required <code>openinference.span.kind</code> attribute declaring what a span <em>is</em>. Values:
+<strong>LLM, EMBEDDING, CHAIN, RETRIEVER, RERANKER, TOOL, AGENT, GUARDRAIL, EVALUATOR, PROMPT</strong>.
+LLM = a model call; TOOL = an external tool call; CHAIN = glue between steps; AGENT = a span wrapping LLM+TOOL calls.
+<span class="cite">[<a href="https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md">semantic conventions</a>]</span></p>
+
+<p><span class="defterm">OpenTelemetry (OTel)</span> &amp; <span class="defterm">OpenInference</span><br>
+<strong>OTel</strong> is the vendor-neutral standard for emitting telemetry (the generic span/trace machinery).
+<strong>OpenInference</strong> is Arize's AI-specific layer on top — the span kinds and attribute names for
+LLM/agent observability. Phoenix consumes both; traces stay portable to any OTel backend.
+<span class="cite">[<a href="https://github.com/Arize-ai/openinference">OpenInference</a>]</span></p>
+
+<p><span class="defterm">LLM-as-a-judge</span><br>
+Using an LLM to score or classify another system's output. In Phoenix, evaluators use function calling to
+return <em>structured</em> judgments, and return an explanation by default.
+<em>Avoid</em>: auto-grading, AI review.
+<span class="cite">[<a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix evals</a>]</span></p>
+
+<p><span class="defterm">Dataset</span> &amp; <span class="defterm">Experiment</span> (Phoenix)<br>
+A <strong>dataset</strong> is a versioned collection of examples (input + optional expected output). An
+<strong>experiment</strong> runs a task function over a dataset with evaluators attached, to compare
+versions of a prompt/model/agent side by side. This is the improvement loop.
+<span class="cite">[<a href="https://arize.com/docs/phoenix/datasets-and-experiments/quickstart-datasets">Datasets &amp; Experiments</a>]</span></p>
+
+<p><span class="defterm">Path convergence</span><br>
+An agent-efficiency metric: <em>minimum steps for this query type ÷ steps actually taken</em>, a 0–1 score.
+Low = the agent wandered. Distinct from correctness (did it get the right answer at all).
+<span class="cite">[<a href="https://arize.com/docs/phoenix/evaluation/running-pre-tested-evals/agent-path-convergence">Path convergence</a>]</span></p>
+
+<h2>Learning-science terms (how we teach here)</h2>
+
+<p><span class="defterm">Fluency strength</span> vs <span class="defterm">storage strength</span><br>
+<strong>Fluency</strong> = in-the-moment retrieval (feels like mastery, fades fast).
+<strong>Storage</strong> = durable long-term retention (the real goal). Built by <em>desirable difficulty</em>:
+retrieval practice, spacing, and interleaving.</p>
+
+<p><span class="defterm">Zone of proximal development</span><br>
+The band of difficulty that is challenging but achievable with support — where each lesson aims to sit.</p>
+
+<div class="ask-teacher">
+  <strong>This is your teacher's dictionary too.</strong> If a definition here feels wrong or a term is
+  missing, tell me — updating the glossary as your understanding sharpens is part of the work.
+</div>
+
+<div class="lesson-nav">
+  <span>← <a href="../MISSION.md">Mission</a></span>
+  <span><a href="../lessons/0001-what-is-a-harness.html">Start: Lesson 1 — What a harness is →</a></span>
+</div>

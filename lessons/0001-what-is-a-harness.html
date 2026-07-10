@@ -1,0 +1,158 @@
+<link rel="stylesheet" href="../assets/course.css">
+<title>Lesson 1 · What a harness actually is</title>
+
+<p class="kicker">
+  <span class="lesson-no">LESSON 01</span>
+  <span>Coding-agent harnesses</span>
+  <span>· ~7 min · the core loop</span>
+</p>
+<h1>What a harness actually is</h1>
+<p class="subtitle">One prompt does not become one answer. It becomes a <em>loop</em>. Once you can see the loop,
+every Vaadin failure and every Phoenix trace has an address.</p>
+
+<div class="callout">
+  <span class="label">The win for this lesson</span>
+  By the end you can explain, from memory, the four-step loop a harness runs — and point to exactly
+  which step a hallucinated Vaadin API, a raw-<code>&lt;div&gt;</code> mistake, and an untested change each live in.
+  That address is what makes "agent-readiness" a concrete engineering task rather than a vibe.
+</div>
+
+<h2>The harness is the scaffolding, not the model</h2>
+
+<p>It's tempting to think "Claude wrote this code." More precisely: a <span class="defterm">model</span>
+proposed actions, and a <span class="defterm">harness</span> executed them. The harness is the program around
+the model that <strong>assembles context, exposes tools, calls the model, runs the model's tool calls, feeds
+the results back, and manages context across turns.</strong> Anthropic describes the Claude Agent SDK — the
+same machinery that powers Claude Code — as exactly this: "a general-purpose agent harness."<sup class="cite"><a href="#s1">1</a></sup></p>
+
+<p>The distinction that unlocks everything: a <strong>workflow</strong> runs models and tools through
+<em>predefined code paths</em>; an <strong>agent</strong> is a model that <em>dynamically directs its own
+process and tool use</em>.<sup class="cite"><a href="#s2">2</a></sup> Claude Code is an agent. You don't script
+its steps — you shape the environment it decides within. <em>That</em> is what you're hardening when you make
+Vaadin agent-ready.</p>
+
+<h2>The loop: gather → act → verify → repeat</h2>
+
+<p>Anthropic's canonical description of what an agent does, each turn, is four moves:<sup class="cite"><a href="#s1">1</a></sup></p>
+
+<div class="loop-diagram">
+  <span class="node"><strong>1. Gather context</strong><br>read files, search, MCP docs</span>
+  <span class="arrow">→</span>
+  <span class="node"><strong>2. Take action</strong><br>call a tool (edit, run, query)</span>
+  <span class="arrow">→</span>
+  <span class="node"><strong>3. Verify work</strong><br>tests, build, visual check</span>
+  <span class="arrow">↺</span>
+  <span class="node"><strong>repeat</strong><br>until the task is done</span>
+</div>
+
+<p>The model isn't loaded with your whole project. It works inside a <span class="defterm">context window</span> —
+a finite "attention budget" (200K tokens in Claude Code) that degrades as it fills.<sup class="cite"><a href="#s3">3</a></sup>
+So step 1 is not free: the agent must <em>choose</em> what to pull in, ideally
+<strong>just-in-time</strong> — fetching what it needs now rather than pre-loading everything.<sup class="cite"><a href="#s3">3</a></sup>
+Every design decision you'll make later (an MCP server, a <code>CLAUDE.md</code>, a skill) is really a decision
+about <em>what lands in that window, at which step, in the loop</em>.</p>
+
+<h2>Watch the loop run on a real Vaadin prompt</h2>
+
+<p>You type: <em>"Add a delete button to the user grid."</em> Here is the loop, annotated with where Vaadin
+projects break<sup class="cite"><a href="#s5">5</a></sup> and how each moment shows up as a
+<span class="defterm">span</span> in your Phoenix trace<sup class="cite"><a href="#s6">6</a></sup>:</p>
+
+<div class="callout">
+  <span class="label">1 · Gather context</span>
+  The agent reads your grid class and needs to know the current <code>Grid</code> API. <strong>Failure mode:</strong>
+  with no grounding it recalls a <em>pre-25 or invented</em> Vaadin API — the single most common agentic-coding
+  complaint on the Vaadin forum. <strong>Fix's home:</strong> this step — the Vaadin MCP server injects real,
+  version-correct docs here. <strong>In Phoenix:</strong> a <code>RETRIEVER</code> or <code>TOOL</code> span (the doc lookup),
+  feeding an <code>LLM</code> span.
+</div>
+<div class="callout">
+  <span class="label">2 · Take action</span>
+  The agent edits the file. <strong>Failure mode:</strong> it hand-rolls a raw <code>&lt;div&gt;</code> button
+  instead of Vaadin's <code>Button</code>/<code>Grid</code> component API. <strong>Fix's home:</strong> also upstream in
+  step 1 (better component knowledge) — but the mistake <em>surfaces</em> here. <strong>In Phoenix:</strong> a
+  <code>TOOL</code> span (the file edit), nested under an <code>AGENT</code> span.
+</div>
+<div class="callout warn">
+  <span class="label">3 · Verify work</span>
+  Does it compile? Does the button render? <strong>Failure mode:</strong> the agent declares victory without
+  running anything — models are notoriously poor at grading their own output.<sup class="cite"><a href="#s4">4</a></sup>
+  <strong>Fix's home:</strong> give verification a real interface — a build, a test, a Playwright visual check
+  (the <code>visual-verification</code> skill in Vaadin's reference repo).<sup class="cite"><a href="#s7">7</a></sup>
+  <strong>In Phoenix:</strong> a <code>TOOL</code> span running the build/test, whose <em>status</em> tells you pass or fail.
+</div>
+
+<p>Notice the payoff: "make Vaadin agent-ready" decomposes into <em>"put the right thing in the right loop
+step."</em> Grounding docs → step 1. Component skills → step 1. A verify harness → step 3. You are not improving
+"the AI" in the abstract; you are engineering three specific moments.</p>
+
+<div class="primary-source">
+  <div class="label">Read this next — primary source</div>
+  <div class="src-title">Building agents with the Claude Agent SDK — Anthropic Engineering</div>
+  <p style="margin:.4rem 0 0">The clearest primary statement of the loop and of Claude-Code-as-harness. ~15 min.
+  <br><a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk">anthropic.com/engineering/building-agents-with-the-claude-agent-sdk</a></p>
+</div>
+
+<h2>Check yourself (retrieval, not recognition)</h2>
+<p>Answer <em>before</em> opening each toggle. Struggling to recall is the point — it's what builds durable memory,
+not fluency that fades.</p>
+
+<div class="quiz">
+  <div class="q">1. From memory: what are the four steps of the agentic loop, in order?</div>
+  <details>
+    <summary>Reveal</summary>
+    <strong>Gather context → take action → verify work → repeat.</strong> If you got three of four, the one
+    people drop is usually <em>verify</em> — which is exactly the step most agent failures hide in.
+  </details>
+
+  <div class="q">2. An agent writes a raw <code>&lt;div&gt;</code> grid instead of Vaadin's <code>Grid</code>, and invents an
+  API that doesn't exist. Which upfront addition most directly prevents this?</div>
+  <ul class="choices">
+    <li>A) A bigger context window</li>
+    <li>B) The Vaadin MCP server</li>
+    <li>C) A second worker subagent</li>
+    <li>D) A longer system prompt</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>B.</strong> The failure is bad <em>context at step 1</em> — the model is guessing at Vaadin's API.
+    The MCP server grounds that step with real, version-correct docs. A bigger window (A) gives it more room to
+    guess wrong; more subagents (C) and a longer prompt (D) don't supply the missing facts.
+  </details>
+
+  <div class="q">3. In a Phoenix trace, which span kind wraps a group of LLM and TOOL calls?</div>
+  <ul class="choices">
+    <li>A) CHAIN</li>
+    <li>B) AGENT</li>
+    <li>C) LLM</li>
+    <li>D) TOOL</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>B — AGENT.</strong> An <code>AGENT</code> span "encompasses calls to LLMs and Tools." <code>CHAIN</code> is
+    glue between steps; <code>LLM</code> and <code>TOOL</code> are the individual calls it contains.
+  </details>
+</div>
+
+<div class="ask-teacher">
+  <strong>I'm your teacher — ask me anything.</strong> Unsure how the loop maps onto <em>your</em> app, or want to
+  actually wire the Vaadin MCP server and watch the step-1 spans change in Phoenix? Say the word and we'll do it
+  hands-on. Good next questions: <em>"Show me the loop in one of my real Phoenix traces,"</em> or
+  <em>"What exactly should go in step 1 vs. a CLAUDE.md?"</em>
+</div>
+
+<h2 id="sources" class="cite">Sources</h2>
+<ol class="sources">
+  <li id="s1"><a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk">Building agents with the Claude Agent SDK</a> — Anthropic. The loop; Agent SDK as general-purpose harness.</li>
+  <li id="s2"><a href="https://www.anthropic.com/research/building-effective-agents">Building Effective Agents</a> — Anthropic. Workflow vs. agent.</li>
+  <li id="s3"><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a> — Anthropic. Context window as attention budget; just-in-time retrieval.</li>
+  <li id="s4"><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a> — Anthropic. Poor self-evaluation; verification as a first-class interface.</li>
+  <li id="s5"><a href="https://vaadin.com/forum/t/whats-your-biggest-problem-doing-agentic-coding-with-vaadin/179541">Vaadin Forum: biggest problems with agentic coding</a> — API hallucination, raw HTML over components. (Thread bodies unverified in research; treat specifics as community-reported.)</li>
+  <li id="s6"><a href="https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md">OpenInference semantic conventions</a> — span kinds (LLM, TOOL, RETRIEVER, AGENT, …).</li>
+  <li id="s7"><a href="https://github.com/vaadin/spec-driven-development-demo">vaadin/spec-driven-development-demo</a> — the <code>visual-verification</code> (Playwright) skill.</li>
+</ol>
+
+<div class="lesson-nav">
+  <span><a href="../reference/glossary.html">📖 Glossary</a> · <a href="../MISSION.md">🎯 Mission</a></span>
+  <span>Next: Lesson 2 — Context engineering, or the window is the whole game →</span>
+</div>
