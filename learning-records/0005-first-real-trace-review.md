@@ -13,10 +13,12 @@ and aims Lesson 3's evals.
   is wall-clock and includes idle time** (sleep, permission waits) — so duration/latency is a BAD
   agent-quality signal. Use token count, span count, and active time (`claude_code.active_time.total`)
   instead. This directly shapes Lesson 3: do NOT build a latency-based eval.
-- **No visible Vaadin doc grounding.** The tools seen are generic Claude Code tools (Bash, Write,
-  ToolSearch); no `search_vaadin_docs` / Vaadin MCP TOOL span. Many consecutive `Write`s with no
-  grounding = Lesson-2 Smell 1 (ungrounded gather → hallucinated-API risk). Likely the Vaadin MCP
-  server is not wired in — the #1 agent-readiness fix.
+- **Vaadin MCP is ENABLED, but no `search_vaadin_docs` span appeared in the one turn we could see.**
+  So the gap is tool *adoption*, not *availability* — the agent has the doc tool and isn't calling it
+  before writing Vaadin code (Lesson-2 Smell 1). Caveat: only Turn 1 (the sleep turn) was visible;
+  grounding may occur in Turns 2–6. The lever is a rule that compels use (a CLAUDE.md/AGENTS.md
+  "search Vaadin docs before writing components") and/or the official `vaadin/agent-skills`. This
+  uncertainty ("does it ground itself, and how often?") is the motivating question for Lesson 3's eval.
 - Nice callback: the `ToolSearch` span (`select:TaskCreate`, `total_deferred_tools: 79`) is the harness
   doing just-in-time retrieval of its OWN tool schemas — Lesson 1's JIT retrieval, made visible.
 

@@ -1,0 +1,156 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../assets/course.css">
+<title>Lesson 3 · Your first eval — is the agent grounded?</title>
+
+<p class="kicker">
+  <span class="lesson-no">LESSON 03</span>
+  <span>Coding-agent harnesses</span>
+  <span>· ~9 min · from reading to measuring</span>
+</p>
+<h1>Your first eval: is the agent grounded?</h1>
+<p class="subtitle">Reading one trace tells you about one run. An <em>eval</em> answers the same question
+about every run, automatically — so you can prove a change helped instead of hoping.</p>
+
+<div class="callout">
+  <span class="label">The win for this lesson</span>
+  You can define one <span class="defterm">eval</span> — "did the agent consult the Vaadin docs before
+  writing Vaadin code?" — compute it across all your traces as a single <strong>grounded-rate</strong>,
+  and use that number to prove whether a <code>CLAUDE.md</code> rule actually changed the agent's behavior.
+</div>
+
+<h2>Why an eval, not another screenshot</h2>
+
+<p>Your trace left a real question open: the Vaadin MCP server is <em>enabled</em>, but in the turn we
+could see, no <code>search_vaadin_docs</code> <code>TOOL</code> ran before the <code>Write</code>s. Enabled ≠ used —
+a tool's presence doesn't earn its calls; the agent will code from memory unless nudged.<sup class="cite"><a href="#s1">1</a></sup>
+So: <em>how often does your agent actually ground itself?</em> You cannot answer that by eyeballing traces
+one at a time. That is what an eval is for — a repeatable judgment applied to every trace.</p>
+
+<h2>Two kinds of evaluator — pick the cheap one when you can</h2>
+<p>Phoenix supports two<sup class="cite"><a href="#s2">2</a></sup>:</p>
+<div class="callout tip">
+  <span class="label">Code-based evaluator</span>
+  Deterministic checks over the trace's structure or attributes — "did span X precede span Y?",
+  "what was the build's exit status?", "how many tool calls?". Cheap, fast, exact.
+</div>
+<div class="callout">
+  <span class="label">LLM-as-a-judge</span>
+  An LLM scores something subjective — "is this code idiomatic Vaadin?", "was the answer correct?".
+  In Phoenix it uses function calling to return a structured label and an explanation by default.<sup class="cite"><a href="#s3">3</a></sup>
+</div>
+<p><strong>"Did a doc-search precede the first edit?" is a structural fact</strong> — so it's a <em>code-based</em>
+evaluator. Reach for an LLM judge only when the question needs judgment. Save the model (and the money)
+for questions code can't answer.</p>
+
+<h2>The grounding eval, concretely</h2>
+<p>The rule, in one sentence: <em>within an <code>AGENT</code> turn, a Vaadin-doc <code>TOOL</code> (or a
+file <code>Read</code>) must appear before the first <code>Write</code>/<code>Edit</code>.</em> As an algorithm over spans:</p>
+
+<pre>from phoenix.client import Client            # verify names against your Phoenix version
+import pandas as pd
+
+# 1. pull this project's spans out of Phoenix
+spans = Client().spans.get_spans_dataframe(project_name="expense-manager")
+
+def turn_is_grounded(turn_spans):
+    turn_spans = turn_spans.sort_values("start_time")
+    saw_grounding = False
+    for _, s in turn_spans.iterrows():
+        name = (s["name"] or "").lower()
+        if "search_vaadin_docs" in name or s["span_kind"] in ("RETRIEVER",) or name.startswith("read"):
+            saw_grounding = True
+        if name.startswith(("write", "edit")):
+            return saw_grounding          # first write decides the verdict
+    return None                            # no write happened this turn -> not applicable
+
+# 2. one verdict per AGENT turn (group spans by their trace / turn id)
+verdicts = spans.groupby("context.trace_id").apply(turn_is_grounded)
+grounded_rate = verdicts.dropna().mean()   # e.g. 0.40  ->  40% of writing turns were grounded
+print(f"grounded-rate: {grounded_rate:.0%}")</pre>
+
+<p>Then <strong>write the verdict back into Phoenix</strong> as a span evaluation so it shows on every trace
+and trends over time (Phoenix logs these as <code>SpanEvaluations</code> / annotations<sup class="cite"><a href="#s2">2</a></sup>).
+The exact client call varies by version — check the docs — but the shape is: build a dataframe of
+<code>(span_id, label, score)</code> and log it against an eval named <code>"grounded"</code>.</p>
+
+<div class="callout tip">
+  <span class="label">The feedback loop this unlocks</span>
+  1. Measure today's <strong>grounded-rate</strong> (say 40%). 2. Add a <code>CLAUDE.md</code> rule:
+  <em>"Before writing or changing a Vaadin component, search the Vaadin docs."</em><sup class="cite"><a href="#s4">4</a></sup>
+  3. Re-run the same tasks and re-measure. If the rate jumps to 85%, you've <em>proven</em> the rule works —
+  in numbers, not vibes. That is the entire mission in one loop.
+</div>
+
+<div class="aside">
+  Rigorous version: pin a fixed set of tasks as a Phoenix <span class="defterm">dataset</span> and run each
+  change as an <span class="defterm">experiment</span>, so before/after comparisons are apples-to-apples on
+  versioned inputs.<sup class="cite"><a href="#s5">5</a></sup> Same idea, controlled inputs.
+</div>
+
+<div class="primary-source">
+  <div class="label">Read this next — primary source</div>
+  <div class="src-title">Phoenix — Datasets &amp; Experiments quickstart</div>
+  <p style="margin:.4rem 0 0">How to turn a one-off metric into a controlled before/after experiment on a
+  fixed task set — the disciplined form of the loop above. ~12 min.
+  <br><a href="https://arize.com/docs/phoenix/datasets-and-experiments/quickstart-datasets">arize.com/docs/phoenix/datasets-and-experiments/quickstart-datasets</a></p>
+</div>
+
+<h2>Check yourself (recall before revealing)</h2>
+<div class="quiz">
+  <div class="q">1. From memory: what separates a code-based evaluator from an LLM-as-a-judge, and which fits
+  "did a doc-search precede the first edit?"</div>
+  <details>
+    <summary>Reveal</summary>
+    <strong>Code-based</strong> checks objective/structural facts deterministically; <strong>LLM-as-a-judge</strong>
+    scores subjective/semantic quality. "Did a doc-search precede the edit?" is structural → <strong>code-based</strong>.
+  </details>
+
+  <div class="q">2. Which of these should be an LLM-as-a-judge rather than a code check?</div>
+  <ul class="choices">
+    <li>A) "Did a doc-search precede the edit?"</li>
+    <li>B) "Is the generated code idiomatic Vaadin?"</li>
+    <li>C) "How many tool calls ran this turn?"</li>
+    <li>D) "Did the build step exit with zero?"</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>B.</strong> "Idiomatic" is a judgment — no deterministic rule captures it, so it needs an LLM judge.
+    A, C, and D are all structural facts a few lines of code decide exactly.
+  </details>
+
+  <div class="q">3. You add the "search docs first" rule and the grounded-rate goes 40% → 85%. What have you
+  demonstrated?</div>
+  <ul class="choices">
+    <li>A) The change improved grounding, measurably</li>
+    <li>B) The generated code is now bug-free</li>
+    <li>C) The agent became faster at everything</li>
+    <li>D) The per-run cost is guaranteed lower</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> The eval measures grounding and only grounding — it went up, so that behavior improved.
+    Correctness (B), speed (C), and cost (D) are <em>separate</em> evals; don't infer them from this one.
+  </details>
+</div>
+
+<div class="ask-teacher">
+  <strong>I'm your teacher — ask me anything.</strong> Best next move: run the grounding check against
+  <code>expense-manager</code> and tell me the number. If it's low, we'll write the <code>CLAUDE.md</code> rule together
+  and watch it move. Or ask <em>"help me adapt the span-field names to my Phoenix version"</em> — the column
+  names differ slightly by release and I can match them to what you see.
+</div>
+
+<h2 id="sources" class="cite">Sources</h2>
+<ol class="sources">
+  <li id="s1"><a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing effective tools for AI agents</a> — Anthropic: tool definitions must be prompt-engineered; presence alone doesn't drive correct use.</li>
+  <li id="s2"><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix — LLM Evals</a>: code-based and LLM evaluators; logging results back as span evaluations/annotations.</li>
+  <li id="s3"><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix — LLM Evals</a>: LLM-as-a-judge via function calling; explanations returned by default.</li>
+  <li id="s4"><a href="https://www.anthropic.com/engineering/claude-code-best-practices">Claude Code best practices</a> — Anthropic: <code>CLAUDE.md</code> is auto-loaded project context for conventions and guardrails.</li>
+  <li id="s5"><a href="https://arize.com/docs/phoenix/datasets-and-experiments/quickstart-datasets">Phoenix — Datasets &amp; Experiments</a>: versioned datasets + experiments for controlled before/after comparison.</li>
+</ol>
+
+<div class="lesson-nav">
+  <span><a href="0002-reading-the-loop-in-phoenix.html">← Lesson 2</a> · <a href="../reference/glossary.html">📖 Glossary</a></span>
+  <span>Next: Lesson 4 — Cost &amp; path convergence: catching the 18M-token turn →</span>
+</div>
