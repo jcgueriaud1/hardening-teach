@@ -1,0 +1,151 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../assets/course.css">
+<title>Lesson 4 · Cost &amp; path convergence — the expensive turn</title>
+
+<p class="kicker">
+  <span class="lesson-no">LESSON 04</span>
+  <span>Coding-agent harnesses</span>
+  <span>· ~9 min · efficiency you can measure</span>
+</p>
+<h1>Cost &amp; path convergence: the expensive turn</h1>
+<p class="subtitle">One of your turns spent 18M tokens and $16 on a single prompt. Correct isn't enough —
+this lesson makes efficiency a number you can flag, explain, and fix.</p>
+
+<div class="callout">
+  <span class="label">The win for this lesson</span>
+  You can flag cost-outlier turns automatically, read <em>inside</em> one to see <strong>why</strong> it blew up
+  (context thrash vs. legitimately big), and name the levers that shrink it — so "Turn 2 cost $16" becomes
+  a bug you can close, not a mystery.
+</div>
+
+<h2>Measure effort honestly — three signals, and one trap</h2>
+<p>Last lesson's laptop-sleep turn taught the trap: <strong>duration is wall-clock and includes idle time</strong>,
+so it is a lie about effort. The honest signals are:</p>
+<ul>
+  <li><strong>Tokens per turn</strong> — the real driver of cost and of context pressure.</li>
+  <li><strong>Tool-call / span count per turn</strong> — how many steps the agent took.</li>
+  <li><strong>Path convergence</strong> — <em>minimum steps for this task type ÷ steps actually taken</em>, a 0–1
+    score. 1.0 = optimal; low = it wandered.<sup class="cite"><a href="#s1">1</a></sup></li>
+</ul>
+<p>Path convergence is the sharpest, but it needs ground truth: you must know the <em>minimum</em> steps a task
+type should take. Until you have that, <strong>token/span outlier detection is the pragmatic first eval</strong> —
+no ground truth required.</p>
+
+<h2>The cost-outlier eval, concretely</h2>
+<p>Sum each turn's tokens, compare to the median, flag the turns that dwarf it:</p>
+<pre>from phoenix.client import Client          # verify names against your Phoenix version
+spans = Client().spans.get_spans_dataframe(project_name="expense-manager")
+
+# tokens per AGENT turn (group by trace); attribute name per OpenInference
+tok  = spans.groupby("context.trace_id")["llm.token_count.total"].sum()
+steps = spans[spans["span_kind"] == "TOOL"].groupby("context.trace_id").size()
+
+median = tok.median()
+outliers = tok[tok > 5 * median].sort_values(ascending=False)   # >5x median = investigate
+print(outliers)          # your Turn 2 (18M) lands at the top
+print(steps.loc[outliers.index])   # ...and how many tool steps it took</pre>
+<p>Log the flag back into Phoenix as a span evaluation (same mechanic as Lesson 3), and every future run
+self-reports its outliers.<sup class="cite"><a href="#s2">2</a></sup> No more scrolling the sessions list by eye.</p>
+
+<h2>Now read <em>inside</em> Turn 2 — why 18M?</h2>
+<p>A flag says <em>which</em> turn; the spans say <em>why</em>. The context window is a finite attention budget
+with diminishing returns as it fills<sup class="cite"><a href="#s3">3</a></sup> — 18M tokens in one turn means it
+was refilled many times over. Look for the <strong>thrash signature</strong>:</p>
+<div class="callout warn">
+  <span class="label">Signature 1 · re-reading the same file</span>
+  Multiple <code>Read</code> <code>TOOL</code> spans on the <em>same</em> large file across the turn. The agent keeps
+  re-pulling context it already had — pure waste.
+</div>
+<div class="callout warn">
+  <span class="label">Signature 2 · ballooning LLM input</span>
+  Successive <code>llm_request</code> spans whose <em>prompt</em> token count climbs steeply. The window is
+  filling with history and tool output faster than it's being compacted.
+</div>
+<div class="callout warn">
+  <span class="label">Signature 3 · giant tool outputs</span>
+  A <code>Bash</code>/<code>Read</code> <code>TOOL</code> that dumped a huge output (a full build log, a whole generated file)
+  straight into context, which every later step then re-pays for.
+</div>
+<p>The root cause is usually one named failure mode: the agent <strong>over-scoped</strong> — tried to do too much
+in one turn, filled the window, and thrashed.<sup class="cite"><a href="#s4">4</a></sup> "Implement #23" end-to-end
+in a single turn is exactly the kind of ask that triggers it.</p>
+
+<h2>The levers — and how each shows up in the trace</h2>
+<div class="callout tip">
+  <span class="label">Shrink the expensive turn</span>
+  <strong>1. Scope smaller.</strong> Decompose "implement the issue" into narrower steps → each turn stays inside
+  the window. <strong>2. Delegate exploration to a subagent</strong> — it burns its own context and returns a
+  ~1–2k-token summary, keeping the lead agent's window lean.<sup class="cite"><a href="#s5">5</a></sup>
+  <strong>3. Keep big/irrelevant files out of reach</strong> (ignore build output, generated code) so a <code>Read</code>
+  can't dump megabytes. <strong>4. Trust compaction</strong> instead of re-reading — don't force the agent to
+  reconstruct context by hand.
+</div>
+<p>Mission tie: each lever is a change you can <em>prove</em>. Measure median tokens/turn → apply a scoping rule
+in <code>CLAUDE.md</code> or add a research subagent → re-measure. If Turn-2-shaped outliers disappear and median
+cost drops, the agent-readiness change worked — in dollars.</p>
+
+<div class="primary-source">
+  <div class="label">Read this next — primary source</div>
+  <div class="src-title">Effective context engineering for AI agents — Anthropic</div>
+  <p style="margin:.4rem 0 0">Why the window is a finite budget, and the three tactics that keep long work
+  cheap: compaction, note-taking, and sub-agent context isolation. ~15 min.
+  <br><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">anthropic.com/engineering/effective-context-engineering-for-ai-agents</a></p>
+</div>
+
+<h2>Check yourself (recall before revealing)</h2>
+<div class="quiz">
+  <div class="q">1. From memory: why is duration a bad efficiency signal, and what are two honest ones?</div>
+  <details>
+    <summary>Reveal</summary>
+    Duration is <strong>wall-clock — it includes idle time</strong> (sleep, waiting on prompts). Honest signals:
+    <strong>tokens per turn</strong> and <strong>tool-call/span count</strong> (and path convergence, if you know the minimum steps).
+  </details>
+
+  <div class="q">2. Which pattern inside a turn best explains an 18M-token cost?</div>
+  <ul class="choices">
+    <li>A) Re-reading the same files repeatedly</li>
+    <li>B) Making a single small file edit</li>
+    <li>C) Doing one quick documentation lookup</li>
+    <li>D) Emitting one short final response</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> Re-pulling context it already had refills the window over and over — the thrash
+    signature. B, C, and D are all small, bounded token costs.
+  </details>
+
+  <div class="q">3. Which lever most directly shrinks a turn's context <em>without</em> dropping capability?</div>
+  <ul class="choices">
+    <li>A) Delegating exploration to a subagent</li>
+    <li>B) Raising the sampling temperature</li>
+    <li>C) Disabling the verification step</li>
+    <li>D) Increasing the max output tokens</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> A subagent explores in its own window and returns a small summary, so the lead agent's
+    context stays lean. B changes randomness, C removes a safety net, D grows context — none reduce it safely.
+  </details>
+</div>
+
+<div class="ask-teacher">
+  <strong>I'm your teacher — ask me anything.</strong> Best next move: open Turn 2 in the Traces tab and tell me
+  what you see — repeated <code>Read</code>s of one file? climbing prompt tokens? a giant tool output? Paste the top
+  few spans and we'll pin the cause and pick the right lever. Or ask <em>"help me set a sensible outlier
+  threshold for my project"</em> — 5× median is a starting point, not gospel.
+</div>
+
+<h2 id="sources" class="cite">Sources</h2>
+<ol class="sources">
+  <li id="s1"><a href="https://arize.com/docs/phoenix/evaluation/running-pre-tested-evals/agent-path-convergence">Agent Path Convergence</a> — Phoenix: efficiency = min steps ÷ steps taken (0–1); needs a known minimum per query type.</li>
+  <li id="s2"><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix — Evals</a>: logging code-based results back as span evaluations/annotations.</li>
+  <li id="s3"><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a> — Anthropic: the context window is a finite attention budget with diminishing returns; compaction &amp; note-taking.</li>
+  <li id="s4"><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a> — Anthropic: over-scoping ("do too much at once") fills context and forces thrash.</li>
+  <li id="s5"><a href="https://www.anthropic.com/engineering/multi-agent-research-system">How we built our multi-agent research system</a> — Anthropic: subagents explore in isolated context and return ~1–2k-token summaries.</li>
+</ol>
+
+<div class="lesson-nav">
+  <span><a href="0003-grounding-eval.html">← Lesson 3</a> · <a href="../reference/glossary.html">📖 Glossary</a></span>
+  <span>Next: Lesson 5 — Correctness: an LLM-judge for "is this real Vaadin?" →</span>
+</div>
