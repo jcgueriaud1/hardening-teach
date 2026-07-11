@@ -35,3 +35,7 @@ Working notes and user preferences for this teaching workspace.
 - Every lesson & reference doc links `assets/course.css`.
 - Cite sources inline (superscript) and list them at the foot of each lesson.
 - Glossary is canonical (see `reference/glossary.html` once created) — reuse its terms.
+- Every lesson/reference HTML must start with `<meta charset>` + `<meta name="viewport">`
+  (mobile-critical). The build injects viewport if missing, but author it anyway.
+- Mobile is a first-class target: the shared CSS stacks the loop diagram, wraps long code
+  tokens, and tightens padding under 560px. Test new components at phone width.

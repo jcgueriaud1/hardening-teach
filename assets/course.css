@@ -39,6 +39,8 @@
 :root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+img, svg, video { max-width: 100%; height: auto; }
 
 body {
   margin: 0 auto;
@@ -49,9 +51,14 @@ body {
   font-family: var(--serif);
   font-size: 1.125rem;
   line-height: 1.6;
+  overflow-wrap: break-word;      /* long words/tokens wrap instead of overflowing */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* Inline code with long tokens (env vars, span names) must not force
+   horizontal scroll on narrow screens. Block <pre> keeps its own scroll. */
+:not(pre) > code { overflow-wrap: anywhere; }
 
 /* ---- The course spine: a small kicker at the top of every doc ---- */
 .kicker {
@@ -237,6 +244,21 @@ sup.cite a { text-decoration: none; font-family: var(--sans); }
   cursor: pointer; font-weight: 600; color: var(--accent-2);
 }
 .quiz details[open] summary { margin-bottom: 0.5rem; }
+
+/* ---- Mobile ---- */
+@media (max-width: 560px) {
+  body { padding: 2.25rem 1.15rem 5rem; font-size: 1.06rem; }
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.2rem; margin-top: 2.2rem; }
+  h3 { font-size: 1.02rem; }
+  /* Stack the agentic-loop diagram vertically; rotate the arrows to point down. */
+  .loop-diagram { flex-direction: column; align-items: stretch; }
+  .loop-diagram .node { width: 100%; }
+  .loop-diagram .arrow { transform: rotate(90deg); align-self: center; }
+  .lesson-nav { flex-direction: column; gap: 0.6rem; }
+  .callout, .primary-source, .ask-teacher { padding-left: 0.95rem; padding-right: 0.95rem; }
+  pre { font-size: 0.78rem; }
+}
 
 /* ---- Print ---- */
 @media print {

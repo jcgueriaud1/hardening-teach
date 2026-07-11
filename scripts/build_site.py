@@ -30,6 +30,16 @@ def rewrite_links(html: str) -> str:
     return html
 
 
+def ensure_mobile_head(html: str) -> str:
+    """Safety net: every published page needs a viewport meta or it renders
+    at desktop width (unreadable) on phones. Inject one if a lesson forgot it."""
+    if 'name="viewport"' in html:
+        return html
+    return ('<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            + html)
+
+
 def title_of(path: Path, fallback: str) -> str:
     m = TITLE_RE.search(path.read_text(encoding="utf-8"))
     return (m.group(1).strip() if m else fallback)
@@ -43,8 +53,8 @@ def copy_dir_with_rewrite(name: str) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     files = []
     for f in sorted(src.glob("*.html")):
-        (out / f.name).write_text(rewrite_links(f.read_text(encoding="utf-8")),
-                                  encoding="utf-8")
+        html = ensure_mobile_head(rewrite_links(f.read_text(encoding="utf-8")))
+        (out / f.name).write_text(html, encoding="utf-8")
         files.append(f)
     return files
 
