@@ -1,0 +1,164 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../assets/course.css">
+<title>Lesson 2 · Reading the loop in your Phoenix traces</title>
+
+<p class="kicker">
+  <span class="lesson-no">LESSON 02</span>
+  <span>Coding-agent harnesses</span>
+  <span>· ~8 min · observing the loop</span>
+</p>
+<h1>Reading the loop in your Phoenix traces</h1>
+<p class="subtitle">In Lesson 1 the agentic loop was a mental model. In Phoenix it's a picture you can
+point at. This lesson turns your labeled span tree into a diagnosis.</p>
+
+<div class="callout">
+  <span class="label">The win for this lesson</span>
+  Given a Phoenix trace of Claude Code working on your Vaadin app, you can find the
+  <code>AGENT</code> → <code>LLM</code> / <code>TOOL</code> structure, name which loop step each span belongs to,
+  and point at the exact span where a Flow mistake happened — in under a minute.
+</div>
+
+<h2>Your spans are the loop, relabeled</h2>
+
+<p>You confirmed your spans arrive labeled <code>AGENT</code>, <code>LLM</code>, and <code>TOOL</code>. That labeling
+is <span class="defterm">OpenInference</span> — it means an enrichment layer (the Arize hooks plugin or OTLP
+bridge) has mapped Claude Code's native span tree onto standard span
+kinds<sup class="cite"><a href="#s1">1</a></sup>:</p>
+
+<ul>
+  <li><code>claude_code.interaction</code> → <code>AGENT</code> — <strong>one whole turn</strong> of the loop</li>
+  <li><code>claude_code.llm_request</code> → <code>LLM</code> — <strong>one call to Claude</strong> (a decision)</li>
+  <li><code>claude_code.tool</code> → <code>TOOL</code> — <strong>one tool call</strong> (an observation or action)</li>
+</ul>
+
+<p>So Lesson 1's <strong>gather → act → verify</strong> isn't hidden inside the model — it's laid out as a
+tree you can read. Here is the same "add a delete button to the user grid" turn, as it looks in Phoenix:</p>
+
+<pre>▸ AGENT  claude_code.interaction   "Add a delete button to the user grid"
+   ├─ LLM   llm_request             decide what to do
+   ├─ TOOL  search_vaadin_docs      GATHER · grounds the real Grid API      ← step 1
+   ├─ LLM   llm_request             write the edit
+   ├─ TOOL  Edit  UserView.java     ACT · applies the change                ← step 2
+   ├─ TOOL  Bash  mvn -q compile    VERIFY · status = <span style="color:var(--warn)">ERROR</span>            ← step 3
+   ├─ LLM   llm_request             read the error, fix
+   └─ TOOL  Edit  UserView.java     ACT · corrected                         ↺ repeat</pre>
+
+<p>Read a trace top-down and you are watching the agent think. The <code>AGENT</code> span is the turn; every
+<code>TOOL</code> child is a moment where it touched your project; every <code>LLM</code> child is a decision that
+produced the next action.<sup class="cite"><a href="#s2">2</a></sup></p>
+
+<h2>How to read a trace in five moves</h2>
+<ol>
+  <li><strong>Find the <code>AGENT</code> root.</strong> That's one turn / one prompt. Everything nests under it.</li>
+  <li><strong>Scan the <code>TOOL</code> children for the three loop moments</strong> — a gather (search/read), an act
+    (Edit/Write), a verify (Bash build/test). Missing one is a smell, not just a gap.</li>
+  <li><strong>Check <code>TOOL</code> span <em>status</em>.</strong> A red/ERROR status on a build or test span is your
+    verify step failing — the highest-value thing to look at first.</li>
+  <li><strong>Open the <code>LLM</code> span just <em>before</em> a bad <code>TOOL</code>.</strong> Its input/output shows the
+    reasoning and the tool arguments — <em>why</em> the agent did the wrong thing.
+    (Content is redacted unless prompt/tool logging is enabled.<sup class="cite"><a href="#s3">3</a></sup>)</li>
+  <li><strong>Count the children.</strong> A one-line change that took 15 <code>LLM</code> + 20 <code>TOOL</code> spans is
+    low <span class="defterm">path convergence</span> — correct, maybe, but inefficient.<sup class="cite"><a href="#s4">4</a></sup></li>
+</ol>
+
+<h2>Flow-specific smells to hunt for</h2>
+
+<div class="callout warn">
+  <span class="label">Smell 1 · no gather before code</span>
+  An <code>LLM</code> span goes straight to an <code>Edit</code> <code>TOOL</code> with <strong>no <code>search_vaadin_docs</code>
+  (or file-read) <code>TOOL</code> before it.</strong> The model is coding your <code>Grid</code>/<code>Binder</code> from memory —
+  the classic route to hallucinated or pre-25 Vaadin API. Fix lives in step 1 (grounding).
+</div>
+<div class="callout warn">
+  <span class="label">Smell 2 · raw HTML in the edit</span>
+  An <code>Edit</code> <code>TOOL</code> whose diff adds a raw <code>&lt;div&gt;</code>/<code>&lt;button&gt;</code> instead of a Vaadin
+  <code>Button</code>/<code>Grid</code> component. Visible in the tool's arguments if tool-content logging is on.
+</div>
+<div class="callout warn">
+  <span class="label">Smell 3 · verify missing or ignored</span>
+  No <code>Bash</code> compile/test <code>TOOL</code> at all, or one with ERROR status that the <code>AGENT</code> turn
+  ends right after. The agent declared victory without checking — models over-trust their own
+  work.<sup class="cite"><a href="#s5">5</a></sup> This is where a build/TestBench gate earns its keep.
+</div>
+
+<div class="callout tip">
+  <span class="label">Why this matters for the mission</span>
+  Every fix you'll make to "harden Vaadin for agents" shows up here as a <em>changed trace</em>: turn on the
+  Vaadin MCP server and a <code>search_vaadin_docs</code> <code>TOOL</code> appears in step 1; add a verify skill and a
+  green build <code>TOOL</code> appears in step 3. Phoenix is how you'll <em>prove</em> a change helped.
+</div>
+
+<div class="primary-source">
+  <div class="label">Read this next — primary source</div>
+  <div class="src-title">Observability with OpenTelemetry — Claude Agent SDK / Claude Code docs</div>
+  <p style="margin:.4rem 0 0">The authoritative definition of the exact span tree you're reading
+  (<code>interaction → llm_request / tool</code>) and how to enable prompt/tool content. ~10 min.
+  <br><a href="https://code.claude.com/docs/en/agent-sdk/observability">code.claude.com/docs/en/agent-sdk/observability</a></p>
+</div>
+
+<h2>Check yourself (recall before revealing)</h2>
+<div class="quiz">
+  <div class="q">1. From memory: which span kind marks one whole turn of the loop, and which marks a single tool call?</div>
+  <details>
+    <summary>Reveal</summary>
+    <strong><code>AGENT</code> wraps the whole turn; <code>TOOL</code> is one tool call.</strong>
+    <code>LLM</code> spans are the decisions in between.
+  </details>
+
+  <div class="q">2. In one <code>AGENT</code> turn you see an <code>LLM</code> span go straight to an <code>Edit</code> <code>TOOL</code>,
+  with no doc-lookup or file-read <code>TOOL</code> before it. Which loop step is at risk?</div>
+  <ul class="choices">
+    <li>A) Gathering the context</li>
+    <li>B) Verifying the result</li>
+    <li>C) Taking the action</li>
+    <li>D) Naming the button</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> No gather span means the model is writing Vaadin code from memory — ungrounded
+    step 1, the hallucinated-API route. The act (C) happened fine; verify (B) comes later.
+  </details>
+
+  <div class="q">3. One <code>AGENT</code> turn contains 15 <code>LLM</code> and 20 <code>TOOL</code> spans for a one-line change that
+  ends up correct. Which quality dimension is poor?</div>
+  <ul class="choices">
+    <li>A) Efficiency — path convergence</li>
+    <li>B) Correctness — right answer</li>
+    <li>C) Communication — clear reply</li>
+    <li>D) Reliability — valid tool args</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> It got there (correct), but wandered — many more steps than the task needs is low
+    path convergence, an <em>efficiency</em> problem. That's a distinct axis from whether the answer was right.
+  </details>
+</div>
+
+<div class="aside">
+  Beta note: if you ever see a turn with <em>only</em> <code>LLM</code> spans and no <code>AGENT</code>/<code>TOOL</code> tree,
+  that's the known Agent-SDK-streaming limitation — the full tree emits from the <code>claude -p</code> path.
+  You're seeing <code>AGENT</code>/<code>TOOL</code>, so you're fine.<sup class="cite"><a href="#s6">6</a></sup>
+</div>
+
+<div class="ask-teacher">
+  <strong>I'm your teacher — ask me anything.</strong> Best next move: open one real trace of Claude Code on your
+  Flow app and read it to me — paste the span tree (names + kinds + statuses) and we'll diagnose it together.
+  Or ask <em>"what should a healthy Vaadin trace look like?"</em> and we'll define the target before Lesson 3
+  turns these smells into automatic Phoenix evals.
+</div>
+
+<h2 id="sources" class="cite">Sources</h2>
+<ol class="sources">
+  <li id="s1"><a href="https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md">OpenInference semantic conventions</a> — span kinds; and the Arize <a href="https://github.com/Arize-ai/coding-harness-tracing">coding-harness-tracing</a> / <a href="https://github.com/Arize-ai/claude-code-otlp-collector">otlp-collector</a> mapping interaction→AGENT, llm_request→LLM, tool→TOOL.</li>
+  <li id="s2"><a href="https://code.claude.com/docs/en/agent-sdk/observability">Observability — Claude Agent SDK</a>: "each step of the agent loop becomes a span" (interaction / llm_request / tool).</li>
+  <li id="s3"><a href="https://code.claude.com/docs/en/monitoring-usage">Monitoring — Claude Code</a>: content redacted by default; opt in via <code>OTEL_LOG_USER_PROMPTS</code> / <code>OTEL_LOG_TOOL_DETAILS</code> / <code>OTEL_LOG_TOOL_CONTENT</code>.</li>
+  <li id="s4"><a href="https://arize.com/docs/phoenix/evaluation/running-pre-tested-evals/agent-path-convergence">Agent Path Convergence</a> — Phoenix efficiency metric (min steps ÷ steps taken).</li>
+  <li id="s5"><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a> — Anthropic: agents over-trust their own work; verification as a first-class interface.</li>
+  <li id="s6"><a href="https://github.com/anthropics/claude-code/issues/53954">claude-code #53954</a> — Agent-SDK streaming emits only <code>llm_request</code> spans; <code>claude -p</code> emits the full tree.</li>
+</ol>
+
+<div class="lesson-nav">
+  <span><a href="0001-what-is-a-harness.html">← Lesson 1</a> · <a href="../reference/glossary.html">📖 Glossary</a></span>
+  <span>Next: Lesson 3 — Turning trace smells into automatic Phoenix evals →</span>
+</div>
