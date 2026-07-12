@@ -1,0 +1,148 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../assets/course.css">
+<title>Lesson 5 · Correctness — an LLM-judge for real Vaadin</title>
+
+<p class="kicker">
+  <span class="lesson-no">LESSON 05</span>
+  <span>Coding-agent harnesses</span>
+  <span>· ~9 min · the judgment axis</span>
+</p>
+<h1>Correctness: an LLM-judge for real Vaadin</h1>
+<p class="subtitle">Code can check <em>whether</em> the agent grounded itself. It can't check whether the
+result is idiomatic Vaadin 25 or confident nonsense. That needs judgment — and a judge you can trust.</p>
+
+<div class="callout">
+  <span class="label">The win for this lesson</span>
+  You can build an <span class="defterm">LLM-as-a-judge</span> that labels whether the agent's Vaadin code uses
+  real, idiomatic Vaadin 25 API — and, crucially, you know the two things that make its verdict trustworthy:
+  <strong>ground it</strong> in real docs, and <strong>validate it</strong> against your own labels before believing a number.
+</div>
+
+<h2>Why this one can't be code</h2>
+<p>Lesson 3's rule: use the cheap deterministic check when the question is structural. "Did a doc-search
+precede the edit?" — code. "How many tokens?" — code. But <em>"is this idiomatic Vaadin 25, or a hallucinated
+API?"</em> has no deterministic rule. It needs world knowledge and judgment, so it's an
+<strong>LLM-as-a-judge</strong>: an LLM scores the output and, in Phoenix, returns a structured label plus an
+explanation via function calling.<sup class="cite"><a href="#s1">1</a></sup></p>
+
+<h2>The trap: your judge has the coder's disease</h2>
+<div class="callout warn">
+  <span class="label">The core insight of this lesson</span>
+  An LLM judge asked "is this real Vaadin API?" can <strong>hallucinate exactly like the coder did.</strong> Ask it
+  from memory and it will confidently bless invented methods and flag real ones — you'll have automated a
+  second unreliable opinion. The judge needs the same fix the coder needed: <strong>grounding.</strong>
+</div>
+<p>So feed the judge the <em>real</em> Vaadin docs for the components in the diff — retrieved just-in-time from the
+Vaadin MCP server (<code>get_full_document</code>)<sup class="cite"><a href="#s2">2</a></sup> — and instruct it to judge
+<em>only</em> against that context, never its own memory. This is the whole course rhyming: the same MCP server
+that should ground your coder (Lesson 3) also grounds your evaluator. Ground once, use twice.</p>
+
+<h2>The judge, concretely</h2>
+<p>Give it a tight rubric and a <strong>structured</strong> output — a category, the offending symbols, and an
+explanation (Phoenix evals return explanations by default, which is also how you debug the judge).<sup class="cite"><a href="#s1">1</a></sup></p>
+<pre>RUBRIC = """You are grading a code diff that uses Vaadin Flow (Java).
+Judge ONLY against the official Vaadin docs provided below. Do NOT rely on memory.
+Return one of:
+  idiomatic       - uses real Vaadin 25 API the recommended way
+  non_idiomatic   - real API, but misused (e.g. raw layout where a component fits)
+  hallucinated    - calls a class/method that does not exist in the provided docs
+List the exact offending symbols. Explain in one sentence.
+
+--- OFFICIAL VAADIN DOCS (retrieved) ---
+{vaadin_docs}
+--- CODE DIFF ---
+{code_diff}
+"""
+
+# 1. from the trace: the code the agent wrote (the Edit/Write TOOL span args)
+# 2. retrieve real docs for the components mentioned (Vaadin MCP get_full_document)
+# 3. run the judge with structured (function-calling) output -> {label, symbols[], explanation}
+# 4. log the verdict back to Phoenix as a span evaluation (as in Lessons 3-4)</pre>
+
+<h2>Don't trust it until it agrees with you</h2>
+<div class="callout tip">
+  <span class="label">Validate the judge (a meta-eval)</span>
+  Phoenix's built-in eval templates are trustworthy because they're <em>benchmark-tested</em>.<sup class="cite"><a href="#s3">3</a></sup>
+  Your custom judge isn't — yet. Hand-label ~20 real diffs from your traces (idiomatic / non_idiomatic /
+  hallucinated), run the judge over the same 20, and measure agreement. If it disagrees with you, fix the
+  rubric or the grounding <em>before</em> you believe a single dashboard number. An unvalidated judge is a
+  confident stranger.
+</div>
+
+<h2>Three axes make a scorecard</h2>
+<p>You now have the few metrics that actually indicate Vaadin agent quality<sup class="cite"><a href="#s4">4</a></sup>,
+each measured the right way:</p>
+<ul>
+  <li><strong>Grounding</strong> (Lesson 3) — code-based: did it consult the docs?</li>
+  <li><strong>Efficiency</strong> (Lesson 4) — code-based: tokens/steps, not duration.</li>
+  <li><strong>Correctness</strong> (this lesson) — LLM-judge, grounded &amp; validated: is it real, idiomatic Vaadin?</li>
+</ul>
+<p>Mission success is these three moving together: turn on grounding and correctness should rise; scope tasks
+down and efficiency should rise — and Phoenix shows all three, before and after.</p>
+
+<div class="primary-source">
+  <div class="label">Read this next — primary source</div>
+  <div class="src-title">Phoenix — LLM Evals</div>
+  <p style="margin:.4rem 0 0">How Phoenix runs LLM-as-a-judge (function-calling output, explanations by
+  default), the pre-tested templates, and how to build and benchmark a custom evaluator. ~12 min.
+  <br><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">arize.com/docs/phoenix/evaluation/llm-evals</a></p>
+</div>
+
+<h2>Check yourself (recall before revealing)</h2>
+<div class="quiz">
+  <div class="q">1. From memory: why must an LLM judge for "idiomatic Vaadin" be grounded, when a code check
+  doesn't need to be?</div>
+  <details>
+    <summary>Reveal</summary>
+    The judge shares the coder's weakness — it can <strong>hallucinate Vaadin API from memory</strong>, so it must
+    judge against retrieved real docs to be trustworthy. A code check tests a structural fact that needs no
+    world knowledge, so it can't hallucinate.
+  </details>
+
+  <div class="q">2. What is the biggest risk of an <em>ungrounded</em> Vaadin LLM-judge?</div>
+  <ul class="choices">
+    <li>A) It blesses hallucinated API confidently</li>
+    <li>B) It runs a little slower each call</li>
+    <li>C) It costs a few cents extra</li>
+    <li>D) It returns no explanation text</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> It reproduces the coder's hallucination — approving invented API and flagging real API —
+    so you've automated a second unreliable opinion. Speed and cost (B, C) are minor; explanations (D) it still returns.
+  </details>
+
+  <div class="q">3. Before you trust the judge's numbers on a dashboard, you should first…</div>
+  <ul class="choices">
+    <li>A) Validate it against your own labels</li>
+    <li>B) Deploy it to production right away</li>
+    <li>C) Raise its sampling temperature high</li>
+    <li>D) Remove its explanation field first</li>
+  </ul>
+  <details>
+    <summary>Reveal</summary>
+    <strong>A.</strong> Hand-label a small set and check the judge agrees before believing it. An unvalidated
+    judge might be systematically wrong — and confidently so.
+  </details>
+</div>
+
+<div class="ask-teacher">
+  <strong>I'm your teacher — ask me anything.</strong> Best next move: pick one real diff from an
+  <code>expense-manager</code> trace and we'll draft the judge rubric together, wire in a Vaadin MCP doc lookup for
+  grounding, and hand-check its verdict against your own read. Or ask <em>"which Vaadin docs should I retrieve
+  for a given diff?"</em> — choosing the right grounding context is half the battle.
+</div>
+
+<h2 id="sources" class="cite">Sources</h2>
+<ol class="sources">
+  <li id="s1"><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix — LLM Evals</a>: LLM-as-a-judge via function calling; structured labels; explanations returned by default.</li>
+  <li id="s2"><a href="https://vaadin.com/blog/official-vaadin-mcp">Official Vaadin MCP server</a>: <code>search_vaadin_docs</code> / <code>get_full_document</code> — real, version-correct docs to ground the judge.</li>
+  <li id="s3"><a href="https://arize.com/docs/phoenix/evaluation/llm-evals">Phoenix — LLM Evals</a>: pre-built eval templates are benchmark-tested; custom evaluators should be validated against a labeled set.</li>
+  <li id="s4"><a href="https://github.com/Arize-ai/phoenix/blob/main/tutorials/evals/evaluate_agent.ipynb">Phoenix — evaluate_agent tutorial</a>: agent quality spans correctness, efficiency, communication, reliability — evaluate in layers, not final-answer only.</li>
+</ol>
+
+<div class="lesson-nav">
+  <span><a href="0004-cost-and-path-convergence.html">← Lesson 4</a> · <a href="../reference/glossary.html">📖 Glossary</a></span>
+  <span>Next: Lesson 6 — Shipping the fix: the CLAUDE.md &amp; skills that move the scorecard →</span>
+</div>
