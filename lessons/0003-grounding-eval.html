@@ -70,9 +70,12 @@ grounded_rate = verdicts.dropna().mean()   # e.g. 0.40  ->  40% of writing turns
 print(f"grounded-rate: {grounded_rate:.0%}")</pre>
 
 <p>The full, runnable version — with a <em>discovery</em> step that prints your real span names first, and
-optional log-back — is <a href="../assets/grounding_eval.py"><code>assets/grounding_eval.py</code></a>. Run
-<code>--discover</code> once to confirm what your traces call the Vaadin doc tool (MCP tools may appear
-namespaced, e.g. <code>mcp__vaadin__search_vaadin_docs</code>), then adjust the matchers.</p>
+optional log-back — comes in both languages:
+<a href="../assets/grounding_eval.py"><code>grounding_eval.py</code></a> (Python, <code>arize-phoenix-client</code>) and
+<a href="../assets/grounding_eval.ts"><code>grounding_eval.ts</code></a> (TypeScript, <code>@arizeai/phoenix-client</code>,
+run with <code>npx tsx</code>). Run <code>--discover</code> once to confirm what your traces call the Vaadin doc
+tool (MCP tools may appear namespaced, e.g. <code>mcp__vaadin__search_vaadin_docs</code>), then adjust the matchers.
+Note the TS client reads <code>PHOENIX_HOST</code>, not <code>PHOENIX_COLLECTOR_ENDPOINT</code>.</p>
 
 <p>To <strong>write the verdict back into Phoenix</strong> so it shows on every trace and trends over time, log it
 as an <em>annotation</em> (Phoenix renamed evaluations → annotations; the old <code>log_evaluations</code> is
