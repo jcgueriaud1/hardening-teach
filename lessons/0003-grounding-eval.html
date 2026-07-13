@@ -44,8 +44,16 @@ evaluator. Reach for an LLM judge only when the question needs judgment. Save th
 for questions code can't answer.</p>
 
 <h2>The grounding eval, concretely</h2>
-<p>The rule, in one sentence: <em>within an <code>AGENT</code> turn, a Vaadin-doc <code>TOOL</code> (or a
-file <code>Read</code>) must appear before the first <code>Write</code>/<code>Edit</code>.</em> As an algorithm over spans:</p>
+<p>Label each <code>AGENT</code> turn one of three ways — and the third one is the point:</p>
+<ul>
+  <li><strong>grounded</strong> — a Vaadin-doc lookup happened before the turn's first <em>Vaadin</em> write</li>
+  <li><strong>not_grounded</strong> — a Vaadin write with no preceding doc lookup</li>
+  <li><strong>no_vaadin_code</strong> — the turn wrote no Vaadin code, so it is <em>excluded</em> from the rate</li>
+</ul>
+<p>A turn that only edits YAML or backend logic has no Vaadin API to get wrong — counting it as
+"ungrounded" would poison the metric. So the rate is <code>grounded / (grounded + not_grounded)</code>,
+measured only where grounding actually applies. This is the same "measure the right thing" discipline
+Lesson 5 will insist on for the judge. As an algorithm over spans:</p>
 
 <pre>// npm install @arizeai/phoenix-client   (TS client uses PHOENIX_HOST, not PHOENIX_COLLECTOR_ENDPOINT)
 import { createClient } from "@arizeai/phoenix-client";
@@ -54,33 +62,43 @@ import { getSpans } from "@arizeai/phoenix-client/spans";
 const client = createClient();                       // reads PHOENIX_HOST / PHOENIX_API_KEY
 const { spans } = await getSpans({ client, project: { projectName: "expense-manager" }, limit: 1000 });
 
-function turnIsGrounded(turn) {                       // the spans of one AGENT turn
+function classifyTurn(turn) {                          // -> "grounded" | "not_grounded" | "no_vaadin_code"
   turn.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
   let saw = false;
   for (const s of turn) {
     const name = (s.name ?? "").toLowerCase();
-    if (name.includes("search_vaadin_docs") || s.span_kind === "RETRIEVER") saw = true;
-    if (name.startsWith("write") || name.startsWith("edit")) return saw;   // first write decides
+    if (name.includes("search_vaadin_docs") || name.includes("get_full_document") || s.span_kind === "RETRIEVER") saw = true;
+    // a write counts only if it touches Vaadin (needs tool-content logging in the span attrs)
+    const isVaadinWrite = (name.startsWith("write") || name.startsWith("edit"))
+      && JSON.stringify(s.attributes ?? {}).toLowerCase().includes("com.vaadin");
+    if (isVaadinWrite) return saw ? "grounded" : "not_grounded";   // first Vaadin write decides
   }
-  return null;                                        // no write this turn -> not applicable
+  return "no_vaadin_code";                             // wrote no Vaadin code -> excluded from the rate
 }
 
-// one verdict per AGENT turn (each turn is its own trace)
+// each turn is its own trace
 const byTrace = new Map();
 for (const s of spans) {
   const t = s.context.trace_id;
   if (!byTrace.has(t)) byTrace.set(t, []);
   byTrace.get(t).push(s);
 }
-const verdicts = [...byTrace.values()].map(turnIsGrounded).filter((v) => v !== null);
-const rate = verdicts.filter(Boolean).length / verdicts.length;   // e.g. 0.40 -> 40% grounded
-console.log(`grounded-rate: ${(rate * 100).toFixed(0)}%`);</pre>
+const labels = [...byTrace.values()].map(classifyTurn);
+const vaadin = labels.filter((l) => l !== "no_vaadin_code");        // only where grounding applies
+const rate = vaadin.filter((l) => l === "grounded").length / vaadin.length;
+console.log(`grounded-rate: ${(rate * 100).toFixed(0)}%  (over ${vaadin.length} Vaadin-writing turns)`);</pre>
+
+<p>How does the eval know a write "touches Vaadin"? It scans the write span's attributes for a signal like
+<code>com.vaadin</code> — which requires tool-content logging to be on. Run
+<code>grounding_eval.ts --inspect</code> to see exactly what your write spans capture, then tune the signal.</p>
 
 <p>The full, runnable version — with a <em>discovery</em> step that prints your real span names first, and
 optional log-back — is <a href="../assets/grounding_eval.ts"><code>grounding_eval.ts</code></a> (run with
-<code>npx tsx grounding_eval.ts --project expense-manager --discover</code>). Run <code>--discover</code> once to
-confirm what your traces call the Vaadin doc tool (MCP tools may appear namespaced, e.g.
-<code>mcp__vaadin__search_vaadin_docs</code>), then adjust the matchers.</p>
+<code>npx tsx grounding_eval.ts --project expense-manager --discover</code>). It labels each turn three ways
+(grounded / not_grounded / no_vaadin_code) and reports the rate over Vaadin-writing turns only. Run
+<code>--discover</code> to confirm your span names (MCP tools may appear namespaced, e.g.
+<code>mcp__vaadin__search_vaadin_docs</code>) and <code>--inspect</code> to see what your write spans capture,
+then tune the matchers and the Vaadin-write signal.</p>
 
 <p>To <strong>write the verdict back into Phoenix</strong> so it shows on every trace and trends over time, log it
 as an <em>annotation</em> (Phoenix renamed evaluations → annotations<sup class="cite"><a href="#s2">2</a></sup>):
