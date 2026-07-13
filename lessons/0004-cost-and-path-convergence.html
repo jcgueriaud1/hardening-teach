@@ -34,19 +34,23 @@ no ground truth required.</p>
 
 <h2>The cost-outlier eval, concretely</h2>
 <p>Sum each turn's tokens, compare to the median, flag the turns that dwarf it:</p>
-<pre>from phoenix.client import Client          # verify names against your Phoenix version
-spans = Client().spans.get_spans_dataframe(project_name="expense-manager")
+<pre># pip install arize-phoenix-client pandas   (legacy px.Client() was removed in Phoenix v14)
+from phoenix.client import Client
+spans = Client().spans.get_spans_dataframe(project_identifier="expense-manager", limit=5000)
 
-# tokens per AGENT turn (group by trace); attribute name per OpenInference
-tok  = spans.groupby("context.trace_id")["llm.token_count.total"].sum()
+# tokens per AGENT turn (group by trace). Note the "attributes." prefix, and that
+# token columns are NaN on non-LLM spans -> fill before summing.
+tok   = (spans["attributes.llm.token_count.total"].fillna(0)
+         .groupby(spans["context.trace_id"]).sum())
 steps = spans[spans["span_kind"] == "TOOL"].groupby("context.trace_id").size()
 
 median = tok.median()
 outliers = tok[tok > 5 * median].sort_values(ascending=False)   # >5x median = investigate
 print(outliers)          # your Turn 2 (18M) lands at the top
-print(steps.loc[outliers.index])   # ...and how many tool steps it took</pre>
-<p>Log the flag back into Phoenix as a span evaluation (same mechanic as Lesson 3), and every future run
-self-reports its outliers.<sup class="cite"><a href="#s2">2</a></sup> No more scrolling the sessions list by eye.</p>
+print(steps.reindex(outliers.index))   # ...and how many tool steps it took</pre>
+<p>Log the flag back into Phoenix as an annotation (same mechanic as Lesson 3 —
+<code>Client().spans.log_span_annotations_dataframe(...)</code>), and every future run self-reports its
+outliers.<sup class="cite"><a href="#s2">2</a></sup> No more scrolling the sessions list by eye.</p>
 
 <h2>Now read <em>inside</em> Turn 2 — why 18M?</h2>
 <p>A flag says <em>which</em> turn; the spans say <em>why</em>. The context window is a finite attention budget

@@ -47,32 +47,39 @@ for questions code can't answer.</p>
 <p>The rule, in one sentence: <em>within an <code>AGENT</code> turn, a Vaadin-doc <code>TOOL</code> (or a
 file <code>Read</code>) must appear before the first <code>Write</code>/<code>Edit</code>.</em> As an algorithm over spans:</p>
 
-<pre>from phoenix.client import Client            # verify names against your Phoenix version
-import pandas as pd
+<pre># pip install arize-phoenix-client pandas   (legacy px.Client() was removed in Phoenix v14)
+from phoenix.client import Client
 
-# 1. pull this project's spans out of Phoenix
-spans = Client().spans.get_spans_dataframe(project_name="expense-manager")
+# 1. pull this project's spans (index=context.span_id; span_kind is UPPERCASE)
+spans = Client().spans.get_spans_dataframe(project_identifier="expense-manager", limit=5000)
 
-def turn_is_grounded(turn_spans):
-    turn_spans = turn_spans.sort_values("start_time")
+def turn_is_grounded(turn):
+    turn = turn.sort_values("start_time")
     saw_grounding = False
-    for _, s in turn_spans.iterrows():
-        name = (s["name"] or "").lower()
-        if "search_vaadin_docs" in name or s["span_kind"] in ("RETRIEVER",) or name.startswith("read"):
+    for _, s in turn.iterrows():
+        name = str(s.get("name") or "").lower()
+        if "search_vaadin_docs" in name or s.get("span_kind") == "RETRIEVER":
             saw_grounding = True
         if name.startswith(("write", "edit")):
             return saw_grounding          # first write decides the verdict
-    return None                            # no write happened this turn -> not applicable
+    return None                            # no write this turn -> not applicable
 
-# 2. one verdict per AGENT turn (group spans by their trace / turn id)
-verdicts = spans.groupby("context.trace_id").apply(turn_is_grounded)
-grounded_rate = verdicts.dropna().mean()   # e.g. 0.40  ->  40% of writing turns were grounded
+# 2. one verdict per AGENT turn (each turn is its own trace)
+verdicts = spans.groupby("context.trace_id", group_keys=False).apply(turn_is_grounded)
+grounded_rate = verdicts.dropna().mean()   # e.g. 0.40  ->  40% of writing turns grounded
 print(f"grounded-rate: {grounded_rate:.0%}")</pre>
 
-<p>Then <strong>write the verdict back into Phoenix</strong> as a span evaluation so it shows on every trace
-and trends over time (Phoenix logs these as <code>SpanEvaluations</code> / annotations<sup class="cite"><a href="#s2">2</a></sup>).
-The exact client call varies by version — check the docs — but the shape is: build a dataframe of
-<code>(span_id, label, score)</code> and log it against an eval named <code>"grounded"</code>.</p>
+<p>The full, runnable version — with a <em>discovery</em> step that prints your real span names first, and
+optional log-back — is <a href="../assets/grounding_eval.py"><code>assets/grounding_eval.py</code></a>. Run
+<code>--discover</code> once to confirm what your traces call the Vaadin doc tool (MCP tools may appear
+namespaced, e.g. <code>mcp__vaadin__search_vaadin_docs</code>), then adjust the matchers.</p>
+
+<p>To <strong>write the verdict back into Phoenix</strong> so it shows on every trace and trends over time, log it
+as an <em>annotation</em> (Phoenix renamed evaluations → annotations; the old <code>log_evaluations</code> is
+gone<sup class="cite"><a href="#s2">2</a></sup>):
+<code>Client().spans.log_span_annotations_dataframe(dataframe=df, annotation_name="grounded",
+annotator_kind="CODE")</code>, where <code>df</code> carries a <code>span_id</code> (index or column) plus
+<code>label</code>/<code>score</code>. Annotations attach to a <em>span</em>, so tag each turn's root <code>AGENT</code> span.</p>
 
 <div class="callout tip">
   <span class="label">The feedback loop this unlocks</span>
