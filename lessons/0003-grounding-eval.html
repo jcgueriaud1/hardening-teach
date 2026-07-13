@@ -68,9 +68,10 @@ function classifyTurn(turn) {                          // -> "grounded" | "not_g
   for (const s of turn) {
     const name = (s.name ?? "").toLowerCase();
     if (name.includes("search_vaadin_docs") || name.includes("get_full_document") || s.span_kind === "RETRIEVER") saw = true;
-    // a write counts only if it touches Vaadin (needs tool-content logging in the span attrs)
+    // a write counts only if it touches the Vaadin FRAMEWORK (needs tool-content logging).
+    // Key on "com.vaadin.flow", NOT bare "com.vaadin" -- the app's own group id may be com.vaadin.*
     const isVaadinWrite = (name.startsWith("write") || name.startsWith("edit"))
-      && JSON.stringify(s.attributes ?? {}).toLowerCase().includes("com.vaadin");
+      && JSON.stringify(s.attributes ?? {}).toLowerCase().includes("com.vaadin.flow");
     if (isVaadinWrite) return saw ? "grounded" : "not_grounded";   // first Vaadin write decides
   }
   return "no_vaadin_code";                             // wrote no Vaadin code -> excluded from the rate
@@ -88,9 +89,13 @@ const vaadin = labels.filter((l) => l !== "no_vaadin_code");        // only wher
 const rate = vaadin.filter((l) => l === "grounded").length / vaadin.length;
 console.log(`grounded-rate: ${(rate * 100).toFixed(0)}%  (over ${vaadin.length} Vaadin-writing turns)`);</pre>
 
-<p>How does the eval know a write "touches Vaadin"? It scans the write span's attributes for a signal like
-<code>com.vaadin</code> — which requires tool-content logging to be on. Run
-<code>grounding_eval.ts --inspect</code> to see exactly what your write spans capture, then tune the signal.</p>
+<p>How does the eval know a write "touches Vaadin"? It scans the write span's attributes (the
+<code>input.value</code> diff and <code>tool.file_path</code>, captured when tool-content logging is on) for a
+framework import: <code>com.vaadin.flow</code>. There's a real trap here — keying on bare <code>com.vaadin</code>
+over-matches, because a project's own group id may be <code>com.vaadin.*</code> (this one is
+<code>com.vaadin.expensemanager</code>), so every backend and test file would falsely count as Vaadin. The
+UI framework lives under <code>com.vaadin.flow</code>, so that's the honest signal. Run
+<code>grounding_eval.ts --inspect</code> to confirm what your spans capture before trusting the number.</p>
 
 <p>The full, runnable version — with a <em>discovery</em> step that prints your real span names first, and
 optional log-back — is <a href="../assets/grounding_eval.ts"><code>grounding_eval.ts</code></a> (run with

@@ -13,6 +13,13 @@ A write span (Edit/Write) counts as Vaadin if its attributes contain a signal li
 detected as Vaadin and the rate is empty — which itself flags "turn on OTEL_LOG_TOOL_CONTENT to measure this."
 Added an `--inspect` mode to dump a real write span's attributes so the signal can be tuned to the user's data.
 
+## Vaadin-write signal (verified against real --inspect output)
+Edit/Write spans carry `tool.file_path`, `tool.description`, and `input.value` (the full JSON diff) —
+so tool-content logging IS ON for expense-manager (also unblocks the Lesson 5 correctness judge).
+CRITICAL: the project's own group id is **`com.vaadin.expensemanager`**, so a bare `com.vaadin` signal
+matches every backend/test file. Use the FRAMEWORK package **`com.vaadin.flow`** (add `com.vaadin.hilla`)
+as the Vaadin-write signal. Fixed in the script and Lesson 3.
+
 ## Status
 `assets/grounding_eval.ts` updated and re-typechecked clean against @arizeai/phoenix-client. Lesson 3
-teaches the three-way labeling and the rationale. The Python port was NOT updated (lessons lead with TS).
+teaches the three-way labeling, the rationale, and the com.vaadin.flow gotcha. Python port NOT updated.

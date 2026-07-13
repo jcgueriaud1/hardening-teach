@@ -37,7 +37,10 @@ const GROUNDING_SPAN_KINDS = new Set(["RETRIEVER"]);
 const WRITE_NAME_PREFIXES = ["write", "edit"];
 // A write counts as VAADIN work if any of these appears in its attributes
 // (needs tool-content logging on; --inspect shows what your spans capture).
-const VAADIN_WRITE_SIGNALS = ["com.vaadin", "vaadin.flow"];
+// NOTE: use the FRAMEWORK package "com.vaadin.flow", NOT bare "com.vaadin" —
+// this project's own group id is com.vaadin.expensemanager, so "com.vaadin"
+// would match every backend/test file too. Add "com.vaadin.hilla" for Hilla.
+const VAADIN_WRITE_SIGNALS = ["com.vaadin.flow", "com.vaadin.hilla"];
 
 function isWrite(s: Span): boolean {
   const name = (s.name ?? "").toLowerCase();
