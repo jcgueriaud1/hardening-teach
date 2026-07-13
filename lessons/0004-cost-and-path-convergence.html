@@ -34,23 +34,30 @@ no ground truth required.</p>
 
 <h2>The cost-outlier eval, concretely</h2>
 <p>Sum each turn's tokens, compare to the median, flag the turns that dwarf it:</p>
-<pre># pip install arize-phoenix-client pandas   (legacy px.Client() was removed in Phoenix v14)
-from phoenix.client import Client
-spans = Client().spans.get_spans_dataframe(project_identifier="expense-manager", limit=5000)
+<pre>// npm install @arizeai/phoenix-client
+import { createClient } from "@arizeai/phoenix-client";
+import { getSpans } from "@arizeai/phoenix-client/spans";
 
-# tokens per AGENT turn (group by trace). Note the "attributes." prefix, and that
-# token columns are NaN on non-LLM spans -> fill before summing.
-tok   = (spans["attributes.llm.token_count.total"].fillna(0)
-         .groupby(spans["context.trace_id"]).sum())
-steps = spans[spans["span_kind"] == "TOOL"].groupby("context.trace_id").size()
+const client = createClient();
+const { spans } = await getSpans({ client, project: { projectName: "expense-manager" }, limit: 5000 });
 
-median = tok.median()
-outliers = tok[tok > 5 * median].sort_values(ascending=False)   # >5x median = investigate
-print(outliers)          # your Turn 2 (18M) lands at the top
-print(steps.reindex(outliers.index))   # ...and how many tool steps it took</pre>
+// tokens + tool-steps per AGENT turn (each turn is its own trace). attributes are
+// FLAT dotted-string keys; token counts sit on LLM spans only.
+const tok = new Map(), steps = new Map();
+for (const s of spans) {
+  const t = s.context.trace_id;
+  tok.set(t, (tok.get(t) ?? 0) + Number(s.attributes?.["llm.token_count.total"] ?? 0));
+  if (s.span_kind === "TOOL") steps.set(t, (steps.get(t) ?? 0) + 1);
+}
+const sorted = [...tok.values()].sort((a, b) => a - b);
+const median = sorted[Math.floor(sorted.length / 2)] || 1;
+for (const [t, n] of [...tok].sort((a, b) => b[1] - a[1])) {
+  if (n > 5 * median) console.log(`${t}  ${n} tokens  ${steps.get(t) ?? 0} tool-steps`);  // Turn 2 tops this
+}</pre>
 <p>Log the flag back into Phoenix as an annotation (same mechanic as Lesson 3 —
-<code>Client().spans.log_span_annotations_dataframe(...)</code>), and every future run self-reports its
-outliers.<sup class="cite"><a href="#s2">2</a></sup> No more scrolling the sessions list by eye.</p>
+<code>addSpanAnnotation(...)</code>), and every future run self-reports its outliers.<sup class="cite"><a href="#s2">2</a></sup>
+No more scrolling the sessions list by eye. The full, runnable version is
+<a href="../assets/cost_eval.ts"><code>cost_eval.ts</code></a> (<code>npx tsx cost_eval.ts --project expense-manager</code>).</p>
 
 <h2>Now read <em>inside</em> Turn 2 — why 18M?</h2>
 <p>A flag says <em>which</em> turn; the spans say <em>why</em>. The context window is a finite attention budget

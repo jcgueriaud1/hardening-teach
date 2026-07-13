@@ -41,7 +41,7 @@ that should ground your coder (Lesson 3) also grounds your evaluator. Ground onc
 <h2>The judge, concretely</h2>
 <p>Give it a tight rubric and a <strong>structured</strong> output — a category, the offending symbols, and an
 explanation (Phoenix evals return explanations by default, which is also how you debug the judge).<sup class="cite"><a href="#s1">1</a></sup></p>
-<pre>RUBRIC = """You are grading a code diff that uses Vaadin Flow (Java).
+<pre>const rubric = `You are grading a code diff that uses Vaadin Flow (Java).
 Judge ONLY against the official Vaadin docs provided below. Do NOT rely on memory.
 Return one of:
   idiomatic       - uses real Vaadin 25 API the recommended way
@@ -50,15 +50,14 @@ Return one of:
 List the exact offending symbols. Explain in one sentence.
 
 --- OFFICIAL VAADIN DOCS (retrieved) ---
-{vaadin_docs}
+${vaadinDocs}
 --- CODE DIFF ---
-{code_diff}
-"""
+${codeDiff}`;
 
-# 1. from the trace: the code the agent wrote (the Edit/Write TOOL span args)
-# 2. retrieve real docs for the components mentioned (Vaadin MCP get_full_document)
-# 3. run the judge with structured (function-calling) output -> {label, symbols[], explanation}
-# 4. log the verdict back to Phoenix as a span evaluation (as in Lessons 3-4)</pre>
+// 1. from the trace: the code the agent wrote (the Edit/Write TOOL span args)
+// 2. retrieve real docs for the components mentioned (Vaadin MCP get_full_document)
+// 3. run the judge with structured (tool-call) output -> { label, symbols[], explanation }
+// 4. log the verdict back to Phoenix as an annotation (as in Lessons 3-4)</pre>
 
 <h2>Don't trust it until it agrees with you</h2>
 <div class="callout tip">

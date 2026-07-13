@@ -39,3 +39,9 @@ Working notes and user preferences for this teaching workspace.
   (mobile-critical). The build injects viewport if missing, but author it anyway.
 - Mobile is a first-class target: the shared CSS stacks the loop diagram, wraps long code
   tokens, and tightens padding under 560px. Test new components at phone width.
+- **Eval code is TypeScript** (user preference), using `@arizeai/phoenix-client`
+  (`getSpans` / `addSpanAnnotation`). Runnable assets: `assets/grounding_eval.ts`,
+  `assets/cost_eval.ts` — both typecheck clean against the installed client types.
+  NOTE: the TS client reads `PHOENIX_HOST` (the Python client used `PHOENIX_COLLECTOR_ENDPOINT`),
+  and span attributes are FLAT dotted-string keys (`s.attributes["llm.token_count.total"]`).
+  A Python port (`grounding_eval.py`) remains in the repo but lessons lead with TS.
