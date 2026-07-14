@@ -103,7 +103,9 @@ optional log-back — is <a href="../assets/grounding_eval.ts"><code>grounding_e
 (grounded / not_grounded / no_vaadin_code) and reports the rate over Vaadin-writing turns only. Run
 <code>--discover</code> to confirm your span names (MCP tools may appear namespaced, e.g.
 <code>mcp__vaadin__search_vaadin_docs</code>) and <code>--inspect</code> to see what your write spans capture,
-then tune the matchers and the Vaadin-write signal.</p>
+then tune the matchers and the Vaadin-write signal. For a before/after comparison, use
+<code>--since &lt;timestamp&gt;</code> to measure only the turns produced <em>after</em> a change — a cumulative,
+all-time rate is diluted by history and won't show the movement.</p>
 
 <p>To <strong>write the verdict back into Phoenix</strong> so it shows on every trace and trends over time, log it
 as an <em>annotation</em> (Phoenix renamed evaluations → annotations<sup class="cite"><a href="#s2">2</a></sup>):

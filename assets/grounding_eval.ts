@@ -74,7 +74,13 @@ function getArg(flag: string, dflt?: string): string | undefined {
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : dflt;
 }
 
-async function fetchSpans(client: ReturnType<typeof createClient>, projectName: string, max: number): Promise<Span[]> {
+async function fetchSpans(
+  client: ReturnType<typeof createClient>,
+  projectName: string,
+  max: number,
+  startTime?: Date,
+  endTime?: Date,
+): Promise<Span[]> {
   const out: Span[] = [];
   let cursor: string | undefined = undefined;
   while (out.length < max) {
@@ -83,6 +89,8 @@ async function fetchSpans(client: ReturnType<typeof createClient>, projectName: 
       project: { projectName },
       limit: Math.min(1000, max - out.length),
       cursor,
+      startTime,
+      endTime,
     });
     out.push(...res.spans);
     if (!res.nextCursor) break;
@@ -97,9 +105,20 @@ async function main() {
   const discover = process.argv.includes("--discover");
   const inspect = process.argv.includes("--inspect");
   const doLog = process.argv.includes("--log");
+  // --since / --until isolate a window (e.g. only turns AFTER an intervention),
+  // so a before/after comparison isn't diluted by all-time history.
+  const sinceArg = getArg("--since");
+  const untilArg = getArg("--until");
+  const startTime = sinceArg ? new Date(sinceArg) : undefined;
+  const endTime = untilArg ? new Date(untilArg) : undefined;
+  if (startTime && isNaN(+startTime)) { console.log(`Bad --since date: ${sinceArg}`); return; }
+  if (endTime && isNaN(+endTime)) { console.log(`Bad --until date: ${untilArg}`); return; }
+  if (startTime || endTime) {
+    console.log(`window: ${startTime?.toISOString() ?? "-inf"} .. ${endTime?.toISOString() ?? "now"}`);
+  }
 
   const client = createClient(); // reads PHOENIX_HOST / PHOENIX_API_KEY from env
-  const spans = await fetchSpans(client, project, max);
+  const spans = await fetchSpans(client, project, max, startTime, endTime);
   if (spans.length === 0) {
     console.log(`No spans for project '${project}'. Check the name and PHOENIX_HOST.`);
     return;
