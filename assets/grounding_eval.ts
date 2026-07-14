@@ -21,7 +21,9 @@
  *     npx tsx grounding_eval.ts --project expense-manager --discover   # list span kinds+names
  *     npx tsx grounding_eval.ts --project expense-manager --inspect    # dump a write span's attrs
  *     npx tsx grounding_eval.ts --project expense-manager              # the rate
+ *     npx tsx grounding_eval.ts --project expense-manager --drill      # WHAT got written ungrounded
  *     npx tsx grounding_eval.ts --project expense-manager --log        # + write labels to Phoenix
+ *     (add --since 2026-07-13T00:00:00Z to measure only a post-change window)
  */
 import { createClient } from "@arizeai/phoenix-client";
 import { getSpans, addSpanAnnotation } from "@arizeai/phoenix-client/spans";
@@ -56,6 +58,26 @@ function isVaadinWrite(s: Span): boolean {
 function isGrounding(s: Span): boolean {
   const name = (s.name ?? "").toLowerCase();
   return GROUNDING_NAME_SUBSTRINGS.some((sub) => name.includes(sub)) || GROUNDING_SPAN_KINDS.has(s.span_kind ?? "");
+}
+
+// --- Drill helpers: pull the written code + the Vaadin symbols out of a write span ---
+function writeDiffText(s: Span): string {
+  const attrs = (s.attributes ?? {}) as Record<string, unknown>;
+  const iv = attrs["input.value"];
+  if (typeof iv === "string") {
+    try {
+      const o = JSON.parse(iv);
+      return [o.new_string, o.old_string, o.content].filter(Boolean).join("\n");
+    } catch { /* fall through */ }
+  }
+  return JSON.stringify(attrs);
+}
+function vaadinSymbols(text: string): string[] {
+  const m = text.match(/com\.vaadin\.flow[A-Za-z0-9_.]*/g) ?? [];
+  return [...new Set(m)];
+}
+function filePath(s: Span): string {
+  return String(((s.attributes ?? {}) as Record<string, unknown>)["tool.file_path"] ?? "?");
 }
 
 /** Three-way label for one AGENT turn. */
@@ -104,6 +126,7 @@ async function main() {
   const max = parseInt(getArg("--max", "5000")!, 10);
   const discover = process.argv.includes("--discover");
   const inspect = process.argv.includes("--inspect");
+  const drill = process.argv.includes("--drill");
   const doLog = process.argv.includes("--log");
   // --since / --until isolate a window (e.g. only turns AFTER an intervention),
   // so a before/after comparison isn't diluted by all-time history.
@@ -171,6 +194,26 @@ async function main() {
   }
   console.log(`grounded-rate: ${((tally.grounded / vaadinTurns) * 100).toFixed(0)}%  ` +
     `(${tally.grounded}/${vaadinTurns} Vaadin-writing turns grounded)`);
+
+  // --drill: show WHAT Vaadin code got written cold in each not_grounded turn.
+  if (drill) {
+    const symbolFreq = new Map<string, number>();
+    console.log(`\n--- ungrounded Vaadin writes ---`);
+    for (const [t, label] of labels) {
+      if (label !== "not_grounded") continue;
+      const writes = byTrace.get(t)!.filter(isVaadinWrite);
+      for (const w of writes) {
+        const syms = vaadinSymbols(writeDiffText(w));
+        for (const s of syms) symbolFreq.set(s, (symbolFreq.get(s) ?? 0) + 1);
+        console.log(`  ${filePath(w)}`);
+        if (syms.length) console.log(`     ${syms.join(", ")}`);
+      }
+    }
+    console.log(`\ntop com.vaadin.flow symbols written WITHOUT a doc lookup:`);
+    [...symbolFreq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+      .forEach(([sym, n]) => console.log(`  ${String(n).padStart(4)}  ${sym}`));
+    return;
+  }
 
   // --log: write the three-way label back to each turn's root (AGENT) span.
   if (doLog) {
